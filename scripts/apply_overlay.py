@@ -45,19 +45,54 @@ def main() -> None:
 
     replace_once(vot, "import app.morphe.extension.youtube.shared.VideoState;\n", "import app.morphe.extension.youtube.shared.VideoState;\nimport app.spanishstudy.vot.SpanishStudyController;\n", "VoiceOverTranslationPatch import")
 
-    replace_once(vot, '''                if (playerType == PlayerType.NONE) {\n                    currentVideoId = "";\n                    segments = new ArrayList<>();\n                    TtsPrefetcher.clear();\n                }''', '''                if (playerType == PlayerType.NONE) {\n                    currentVideoId = "";\n                    segments = new ArrayList<>();\n                    TtsPrefetcher.clear();\n                    SpanishStudyController.onVideoCleared();\n                }''', "clear study overlay when player closes")
+    replace_once(vot, '''                if (playerType == PlayerType.NONE) {
+                    currentVideoId = "";
+                    segments = new ArrayList<>();
+                    TtsPrefetcher.clear();
+                }''', '''                if (playerType == PlayerType.NONE) {
+                    currentVideoId = "";
+                    segments = new ArrayList<>();
+                    TtsPrefetcher.clear();
+                    SpanishStudyController.onVideoCleared();
+                }''', "clear study overlay when player closes")
 
-    replace_once(vot, '''        currentVideoId = videoId;\n        segments = new ArrayList<>();\n        httpErrorDialogShownThisVideo = false;''', '''        currentVideoId = videoId;\n        segments = new ArrayList<>();\n        SpanishStudyController.onVideoCleared();\n        httpErrorDialogShownThisVideo = false;''', "clear old study data on new video")
+    replace_once(vot, '''        currentVideoId = videoId;
+        segments = new ArrayList<>();
+        httpErrorDialogShownThisVideo = false;''', '''        currentVideoId = videoId;
+        segments = new ArrayList<>();
+        SpanishStudyController.onVideoCleared();
+        httpErrorDialogShownThisVideo = false;''', "clear old study data on new video")
 
-    replace_once(vot, '''        videoPositionHint = timeMs;\n        // Video state can be null until the overlay is activated the first time.''', '''        videoPositionHint = timeMs;\n        SpanishStudyController.onVideoTimeChanged(timeMs);\n        // Video state can be null until the overlay is activated the first time.''', "feed playback time to matching subtitles")
+    replace_once(vot, '''        videoPositionHint = timeMs;
+        // Video state can be null until the overlay is activated the first time.''', '''        videoPositionHint = timeMs;
+        SpanishStudyController.onVideoTimeChanged(timeMs);
+        // Video state can be null until the overlay is activated the first time.''', "feed playback time to matching subtitles")
 
-    replace_once(vot, '''        if (!sessionEnabled) {\n            stopTts();\n            lastSpokenIndex = -1;''', '''        if (!sessionEnabled) {\n            stopTts();\n            SpanishStudyController.onSessionDisabled();\n            lastSpokenIndex = -1;''', "hide study subtitles when session is disabled")
+    replace_once(vot, '''        sessionEnabled = false;
+        Settings.VOT_SESSION_ENABLED.save(false);
+        stopTts();''', '''        sessionEnabled = false;
+        Settings.VOT_SESSION_ENABLED.save(false);
+        stopTts();
+        SpanishStudyController.onSessionDisabled();''', "hide study subtitles when session is disabled")
 
-    replace_once(vot, '''        stopTts();\n        segments = new ArrayList<>();\n        lastSpokenIndex = -1;\n        // Without this, in-flight onUpdate callbacks for the old language would restore''', '''        stopTts();\n        segments = new ArrayList<>();\n        SpanishStudyController.onVideoCleared();\n        lastSpokenIndex = -1;\n        // Without this, in-flight onUpdate callbacks for the old language would restore''', "clear study data when transcript reloads")
+    replace_once(vot, '''        stopTts();
+        segments = new ArrayList<>();
+        lastSpokenIndex = -1;
+        // Without this, in-flight onUpdate callbacks for the old language would restore''', '''        stopTts();
+        segments = new ArrayList<>();
+        SpanishStudyController.onVideoCleared();
+        lastSpokenIndex = -1;
+        // Without this, in-flight onUpdate callbacks for the old language would restore''', "clear study data when transcript reloads")
 
-    replace_once(vot, '''                                segments = updated;\n                            }''', '''                                segments = updated;\n                                SpanishStudyController.onTranscriptUpdated(updated);\n                            }''', "publish translated batch to study tools")
+    replace_once(vot, '''                                segments = updated;
+                            }''', '''                                segments = updated;
+                                SpanishStudyController.onTranscriptUpdated(updated);
+                            }''', "publish translated batch to study tools")
 
-    replace_once(vot, '''                        if (segments.isEmpty()) segments = fetched;\n                        TtsPrefetcher.updateVideo(videoId, segments);''', '''                        if (segments.isEmpty()) segments = fetched;\n                        SpanishStudyController.onTranscriptUpdated(segments);\n                        TtsPrefetcher.updateVideo(videoId, segments);''', "publish completed translated transcript")
+    replace_once(vot, '''                        if (segments.isEmpty()) segments = fetched;
+                        TtsPrefetcher.updateVideo(videoId, segments);''', '''                        if (segments.isEmpty()) segments = fetched;
+                        SpanishStudyController.onTranscriptUpdated(segments);
+                        TtsPrefetcher.updateVideo(videoId, segments);''', "publish completed translated transcript")
 
     study_methods = r'''
     /** Snapshot consumed by the optional Spanish study UI. */
@@ -120,9 +155,23 @@ def main() -> None:
 
     replace_once(sheet, "import app.morphe.extension.youtube.shared.PipDismissHelper;\n", "import app.morphe.extension.youtube.shared.PipDismissHelper;\nimport app.spanishstudy.vot.SpanishStudyController;\n", "VotBottomSheet import")
 
-    replace_once(sheet, '''        translationRow.setOnClickListener(v -> showTranslationServicePicker(context, mainRef[0]));\n        refreshTranslation.run();''', '''        translationRow.setOnClickListener(v -> showTranslationServicePicker(context, mainRef[0]));\n        refreshTranslation.run();\n\n        LinearLayout studyRow = makeValueRow(context, fg, "Spanish study tools");\n        ((TextView) studyRow.getTag()).setText("Subtitles · vocabulary");\n        studyRow.setOnClickListener(v -> {\n            if (mainRef[0] != null) mainRef[0].dismiss();\n            SpanishStudyController.showTools(Utils.getActivity());\n        });''', "create Spanish study tools row")
+    replace_once(sheet, '''        translationRow.setOnClickListener(v -> showTranslationServicePicker(context, mainRef[0]));
+        refreshTranslation.run();''', '''        translationRow.setOnClickListener(v -> showTranslationServicePicker(context, mainRef[0]));
+        refreshTranslation.run();
 
-    replace_once(sheet, '''        content.addView(translationRow);\n        content.addView(engineRow);\n        content.addView(makeDivider(context, fg));''', '''        content.addView(translationRow);\n        content.addView(engineRow);\n        content.addView(studyRow);\n        content.addView(makeDivider(context, fg));''', "add Spanish study tools row")
+        LinearLayout studyRow = makeValueRow(context, fg, "Spanish study tools");
+        ((TextView) studyRow.getTag()).setText("Subtitles · vocabulary");
+        studyRow.setOnClickListener(v -> {
+            if (mainRef[0] != null) mainRef[0].dismiss();
+            SpanishStudyController.showTools(Utils.getActivity());
+        });''', "create Spanish study tools row")
+
+    replace_once(sheet, '''        content.addView(translationRow);
+        content.addView(engineRow);
+        content.addView(makeDivider(context, fg));''', '''        content.addView(translationRow);
+        content.addView(engineRow);
+        content.addView(studyRow);
+        content.addView(makeDivider(context, fg));''', "add Spanish study tools row")
 
     print("Spanish study overlay integration complete")
 
