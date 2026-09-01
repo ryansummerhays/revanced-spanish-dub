@@ -128,13 +128,13 @@ def main() -> None:
         final long testId = ++currentTestId;
         isTestSpeaking = true;
         lastTestVoiceId = voice;
-        VotOriginalVolumePatch.setAudioMultiplier(Settings.VOT_ORIGINAL_AUDIO_VOLUME.get() / 100.0f);
+        PlayerVolumePatch.setDuckMultiplier(Settings.VOT_ORIGINAL_AUDIO_VOLUME.get() / 100.0f);
 
         if (TTS_ENGINE_SYSTEM.equals(voice)) {
             ensureTts();
             if (!ttsReady) {
                 isTestSpeaking = false;
-                VotOriginalVolumePatch.clearAudioMultiplier();
+                PlayerVolumePatch.clearDuckMultiplier();
                 return;
             }
             updateTtsLanguage();
