@@ -1,0 +1,5 @@
+.gradle/
+build/
+upstream/
+dist/
+*.mpp

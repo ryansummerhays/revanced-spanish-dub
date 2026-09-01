@@ -1,0 +1,18 @@
+package app.spanishstudy.vot;
+
+import java.text.Normalizer;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public final class VocabularyAnalyzer {
+    private static final Pattern WORD = Pattern.compile("[\\p{L}ÁÉÍÓÚÜÑáéíóúüñ]+(?:['’-][\\p{L}ÁÉÍÓÚÜÑáéíóúüñ]+)?");
+    private static final Set<String> VERY_COMMON = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(("a al algo algunas algunos ante antes como con contra cual cuando de del desde donde dos el ella ellas ellos en entre era eramos eran eres es esa esas ese eso esos esta estaba estaban estamos estan estar estas este esto estos fue fueron ha habia han hasta hay la las le les lo los mas me mi mis mucho muy nada ni no nos nosotros o otra otro para pero poco por porque que quien se ser si sin sobre su sus te tengo tiene tienen todo tu tus un una uno unas unos usted ustedes va vamos van y ya yo aqui ahi alli alla ahora hoy ayer manana bien mal asi tambien tampoco siempre nunca vez veces cosa cosas hacer hace hacen hecho ir voy vas ver quiero quiere pueden puede puedo decir dijo dice sabes sabe verdad claro bueno buena buenos buenas mismo misma mismos mismas gran grande mejor peor primero despues luego entonces solo sola todos todas cada ese esa esto esta aqui ahi alla nada alguien nadie mucho mucha muchos muchas poco poca pocos pocas nuevo nueva nuevos nuevas tiempo dia dias ano anos parte forma manera gente momento lugar trabajo casa gracias hola favor siempre nunca casi quizas quiza tal vez pues bueno mira oye vamos venga").split("\\s+"))));
+    private VocabularyAnalyzer() {}
+    public static final class Segment { public final long startMs; public final String text; public Segment(long startMs, String text) { this.startMs=startMs; this.text=text==null?"":text; } }
+    public static List<VocabularyEntry> analyze(Collection<Segment> segments, Set<String> knownWords, int limit, boolean includeCommon) { Set<String> known=new HashSet<>(); if(knownWords!=null) for(String w:knownWords) known.add(normalize(w)); Map<String,VocabularyEntry> map=new HashMap<>(); for(Segment segment:segments){ Matcher matcher=WORD.matcher(segment.text); while(matcher.find()){ String key=normalize(matcher.group()); if(key.length()<=2||known.contains(key)) continue; if(!includeCommon&&VERY_COMMON.contains(key)) continue; if(looksLikeNoise(key)) continue; VocabularyEntry e=map.computeIfAbsent(key,VocabularyEntry::new); e.addOccurrence(segment.startMs,segment.text.trim()); }} for(VocabularyEntry e:map.values()) e.difficultyScore=score(e.word,e.count); List<VocabularyEntry> result=new ArrayList<>(map.values()); Collections.sort(result); return limit>0&&result.size()>limit?new ArrayList<>(result.subList(0,limit)):result; }
+    private static boolean looksLikeNoise(String word){return word.matches(".*(.)\\1{3,}.*")||word.equals("music")||word.equals("applause")||word.equals("foreign");}
+    private static double score(String word,int count){double score=Math.min(3.0,Math.max(0,word.length()-5)*0.32); score+=Math.min(2.3,Math.log1p(count)*0.9); if(word.endsWith("mente"))score+=0.45; if(word.endsWith("cion")||word.endsWith("sion")||word.endsWith("dad")||word.endsWith("miento"))score+=0.35; if(word.length()>=11)score+=0.5; return score;}
+    public static String normalize(String value){if(value==null)return"";String n=Normalizer.normalize(value.toLowerCase(Locale.ROOT),Normalizer.Form.NFD).replaceAll("\\p{M}+","");return n.replace('’','\'').trim();}
+    public static String timestamp(long ms){long total=Math.max(0,ms/1000),h=total/3600,m=(total%3600)/60,s=total%60;return h>0?String.format(Locale.ROOT,"%d:%02d:%02d",h,m,s):String.format(Locale.ROOT,"%d:%02d",m,s);}
+}
