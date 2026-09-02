@@ -43,6 +43,7 @@ public final class SpanishStudyController {
     public static void onVideoTimeChanged(long timeMs){
         Activity activity=Utils.getActivity();
         SpanishSubtitleOverlay.update(activity,timeMs);
+        SourceExpressionMonitor.maybeEnsureAttached(activity);
     }
 
     public static void onVideoCleared(){
@@ -51,6 +52,7 @@ public final class SpanishStudyController {
         SpanishSubtitleOverlay.setSourceSegments(new ArrayList<>());
         SpanishSubtitleOverlay.hide();
         SpanishWordTimingStore.clear();
+        SourceExpressionMonitor.resetDynamics();
     }
 
     public static void onSessionDisabled(){SpanishSubtitleOverlay.hide();}
@@ -68,6 +70,19 @@ public final class SpanishStudyController {
     }
 
     public static void configureGemini(Activity activity){showGeminiSetup(activity);}
+
+    public static boolean sourceExpressionEnabled(Activity activity){
+        return activity!=null&&SpanishStudyPrefs.sourceExpressionEnabled(activity);
+    }
+
+    public static void setSourceExpressionEnabled(Activity activity,boolean enabled){
+        if(activity==null)return;
+        SpanishStudyPrefs.setSourceExpressionEnabled(activity,enabled);
+        SourceExpressionMonitor.setEnabled(activity,enabled);
+        Toast.makeText(activity,
+                enabled?"Source expression enabled":"Source expression disabled",
+                Toast.LENGTH_SHORT).show();
+    }
 
     public static boolean suppressNativeCaptions(){
         Activity activity=Utils.getActivity();
