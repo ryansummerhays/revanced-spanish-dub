@@ -6,21 +6,17 @@ import java.util.List;
 /**
  * Splits source subtitle text into natural spoken phrase units.
  *
- * This deliberately does NOT cut at an arbitrary character/word boundary just to make a line
- * shorter. A slightly long one-line subtitle is preferable to making the dub voice stop halfway
- * through a syntactic thought. The preferred boundaries mirror places a human speaker would
- * naturally pause: sentence punctuation first, then semicolon/colon/dash/comma, and only for very
- * long unpunctuated stretches a small set of strong clause conjunctions.
+ * Text-driven splitting is intentionally conservative: only punctuation that normally corresponds
+ * to a real prosodic break may create a new phrase. We do NOT cut merely because a line is wide,
+ * and we do NOT guess a pause at conjunctions such as because/that/which. Unpunctuated ASR speech
+ * is already segmented upstream from its real caption timing gaps; if no pause signal exists, a
+ * slightly longer one-line subtitle is preferable to making TTS stop halfway through a thought.
  */
 public final class SemanticClauseSplitter {
     public static final int TARGET_CHARS = 42;
     public static final int SOFT_MAX_CHARS = 48;
-    public static final int NATURAL_BOUNDARY_SEARCH_MAX = 72;
+    public static final int NATURAL_BOUNDARY_SEARCH_MAX = 78;
     private static final int MIN_PHRASE_CHARS = 12;
-
-    private static final String[] STRONG_CONJUNCTIONS = {
-            " but ", " because ", " so ", " although ", " though ", " yet ", " while "
-    };
 
     private SemanticClauseSplitter() {}
 
@@ -32,12 +28,9 @@ public final class SemanticClauseSplitter {
         String remaining = text;
         while (remaining.length() > SOFT_MAX_CHARS) {
             int cut = findNaturalPunctuationCut(remaining);
-            if (cut < 0 && remaining.length() > NATURAL_BOUNDARY_SEARCH_MAX) {
-                cut = findStrongConjunctionCut(remaining);
-            }
 
-            // No natural pause exists in a sensible window. Keep the phrase whole rather than
-            // creating the audible mid-thought stop that arbitrary character/word chunking causes.
+            // No trustworthy pause cue: keep the phrase whole. The view may shrink a little to
+            // preserve one line, but audio is never chopped at an arbitrary word boundary.
             if (cut <= 0 || cut >= remaining.length()) break;
 
             String head = remaining.substring(0, cut).trim();
@@ -72,51 +65,6 @@ public final class SemanticClauseSplitter {
             if (score > bestScore) {
                 bestScore = score;
                 best = i;
-            }
-        }
-        return best;
-    }
-
-    private static int findStrongConjunctionCut(String text) {
-        String lower = text.toLowerCase();
-        int max = Math.min(NATURAL_BOUNDARY_SEARCH_MAX,
-                text.length() - MIN_PHRASE_CHARS);
-        int best = -1;
-        int bestScore = Integer.MIN_VALUE;
-
-        for (String conjunction : STRONG_CONJUNCTIONS) {
-            int from = MIN_PHRASE_CHARS;
-            while (true) {
-                int at = lower.indexOf(conjunction, from);
-                if (at < 0 || at > max) break;
-                // Cut BEFORE the conjunction so the following phrase begins naturally with
-                // "but", "because", etc., exactly as a speaker would after a brief pause.
-                if (isSafeTail(text, at)) {
-                    int score = 80 - Math.abs(at - TARGET_CHARS);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        best = at;
-                    }
-                }
-                from = at + conjunction.length();
-            }
-        }
-
-        // "and" is weak and occurs inside many noun/verb phrases. Use it only as a last-resort
-        // boundary for a genuinely long stretch with substantial material on both sides.
-        if (best < 0 && text.length() > 88) {
-            int from = 20;
-            while (true) {
-                int at = lower.indexOf(" and ", from);
-                if (at < 0 || at > max) break;
-                if (at >= 20 && text.length() - at >= 20) {
-                    int score = 55 - Math.abs(at - TARGET_CHARS);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        best = at;
-                    }
-                }
-                from = at + 5;
             }
         }
         return best;
