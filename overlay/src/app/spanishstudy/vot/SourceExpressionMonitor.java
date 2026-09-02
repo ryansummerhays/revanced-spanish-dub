@@ -188,7 +188,7 @@ public final class SourceExpressionMonitor {
 
                 @Override
                 public void onFftDataCapture(Visualizer v, byte[] fft, int samplingRate) {
-                    // Waveform autocorrelation is enough for our deliberately broad expression cue.
+                    // Waveform pitch tracking is enough for our deliberately broad expression cue.
                 }
             }, rate, true, false);
             next.setEnabled(true);
@@ -199,7 +199,8 @@ public final class SourceExpressionMonitor {
         } catch (Throwable ex) {
             // Device/ROM support varies. This feature must never break ordinary dubbing.
             releaseVisualizer();
-            Logger.printDebug(() -> "Source expression unavailable; using neutral TTS expression", ex);
+            Logger.printDebug(() -> "Source expression unavailable; using neutral TTS expression: "
+                    + ex.getClass().getSimpleName() + ": " + ex.getMessage());
         }
     }
 
