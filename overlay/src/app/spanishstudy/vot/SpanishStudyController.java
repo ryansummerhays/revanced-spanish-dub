@@ -78,7 +78,9 @@ public final class SpanishStudyController {
     public static void onVideoTimeChanged(long timeMs){
         Activity activity=Utils.getActivity();
         SpanishSubtitleOverlay.update(activity,timeMs);
-        SourceExpressionMonitor.maybeEnsureAttached(activity);
+        // v2.5 deliberately does not attach the old playback Visualizer. Natural voice phrasing is
+        // derived from punctuation/word timing only, so no RECORD_AUDIO permission or acoustic
+        // measurement is needed.
     }
 
     public static void onVideoCleared(){
@@ -90,10 +92,29 @@ public final class SpanishStudyController {
         TranscriptCorrectionStore.clear();
         DubEventStateStore.clear();
         SourceCaptionTimingStore.beginTranscript();
-        SourceExpressionMonitor.resetDynamics();
     }
 
     public static void onSessionDisabled(){SpanishSubtitleOverlay.hide();}
+
+    /** Safe SSML fragment used by Edge TTS. It never inspects microphone/playback audio. */
+    public static String buildNaturalSsml(String text){
+        return NaturalProsodyFormatter.toSsmlFragment(text);
+    }
+
+    /** Seek back to the currently active source phrase so video, subtitles and dub replay together. */
+    public static boolean replayCurrentPhrase(){
+        return VoiceOverTranslationPatch.replayStudyPhrase(0);
+    }
+
+    /** Seek to the immediately previous source phrase. */
+    public static boolean replayPreviousPhrase(){
+        return VoiceOverTranslationPatch.replayStudyPhrase(-1);
+    }
+
+    /** Human-readable amount of synthesized Spanish currently ready ahead of the playhead. */
+    public static String dubBufferStatus(){
+        return VoiceOverTranslationPatch.getDubBufferStatusForStudy();
+    }
 
     public static boolean isGeminiEnabled(Activity activity){
         return activity!=null&&SpanishStudyPrefs.geminiEnabled(activity);
@@ -109,17 +130,14 @@ public final class SpanishStudyController {
 
     public static void configureGemini(Activity activity){showGeminiSetup(activity);}
 
+    // Retained only for migration from v2.3/v2.4 preferences. The audio-analyzing implementation is
+    // no longer wired into playback in v2.5.
     public static boolean sourceExpressionEnabled(Activity activity){
-        return activity!=null&&SpanishStudyPrefs.sourceExpressionEnabled(activity);
+        return false;
     }
 
     public static void setSourceExpressionEnabled(Activity activity,boolean enabled){
-        if(activity==null)return;
-        SpanishStudyPrefs.setSourceExpressionEnabled(activity,enabled);
-        SourceExpressionMonitor.setEnabled(activity,enabled);
-        Toast.makeText(activity,
-                enabled?"Source expression enabled":"Source expression disabled",
-                Toast.LENGTH_SHORT).show();
+        if(activity!=null)SpanishStudyPrefs.setSourceExpressionEnabled(activity,false);
     }
 
     public static boolean suppressNativeCaptions(){
