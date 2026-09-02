@@ -3,8 +3,9 @@
 
 Applied after apply_overlay.py and before patch_bilingual_subtitles.py. Earlier tuning aggressively
 closed caption gaps and lowered character caps, which made the merger lose useful pause information
-and then fall back to arbitrary width cuts. This patch preserves meaningful source pauses, restores
-longer emergency caps, and uses punctuation+timing as the preferred phrase boundary signal.
+and then fall back to arbitrary width cuts. This patch preserves meaningful source pauses and uses
+punctuation/timing as the preferred phrase-boundary signal. For punctuation-free ASR, real caption
+pauses are allowed to create boundaries even when capitalization is unreliable.
 """
 from __future__ import annotations
 
@@ -30,9 +31,6 @@ def main() -> None:
     if not fetcher.is_file():
         raise RuntimeError(f"Required source missing: {fetcher}")
 
-    # The baseline closes every caption gap below 2.5 seconds before mergeIntoSentences() sees it.
-    # That erases the 250-700 ms pause cues the merger itself later tries to use for ASR phrase
-    # boundaries. Close only tiny timing jitter; preserve real breathing/phrase pauses.
     replace_once(
         fetcher,
         "    private static final long CLOSE_GAP_THRESHOLD_MS = 2_500;\n",
@@ -40,9 +38,6 @@ def main() -> None:
         "preserve natural source pause timing",
     )
 
-    # apply_overlay.py lowers these to 180/120 for quick re-sync. That made width itself act like a
-    # speech boundary. Keep length only as an emergency fuse; punctuation and source pause timing
-    # should normally decide where an utterance ends.
     replace_once(
         fetcher,
         "    private static final int MAX_SENTENCE_CHARS = 180;\n",
@@ -52,8 +47,19 @@ def main() -> None:
     replace_once(
         fetcher,
         "    private static final int MAX_UNPUNCTUATED_CHARS = 120;\n",
-        "    private static final int MAX_UNPUNCTUATED_CHARS = 220;\n",
-        "restore long unpunctuated safety cap",
+        "    private static final int MAX_UNPUNCTUATED_CHARS = 180;\n",
+        "use a moderate emergency cap for punctuation-free ASR",
+    )
+
+    # Old punctuation-free logic required capitalization at a 250ms pause. Auto-captions often use
+    # lowercase throughout, so long spoken passages could remain one enormous event even though the
+    # caption timings clearly contained breathing/phrase pauses. Use the pause itself plus a modest
+    # amount of accumulated text as evidence. This remains more conservative than arbitrary width.
+    replace_once(
+        fetcher,
+        '''                    flush = gap > UNPUNCTUATED_GAP_MS\n                            || (gap > UNPUNCTUATED_SOFT_GAP_MS\n                            && startsWithUpperCase(lines.get(i + 1).text))\n                            || text.length() >= MAX_UNPUNCTUATED_CHARS;''',
+        '''                    flush = gap > 450\n                            || (gap > 180\n                            && (startsWithUpperCase(lines.get(i + 1).text)\n                            || text.length() >= 55))\n                            || text.length() >= MAX_UNPUNCTUATED_CHARS;''',
+        "split punctuation-free ASR on real phrase pauses",
     )
 
     replace_once(
