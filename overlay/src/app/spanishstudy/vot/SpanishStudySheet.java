@@ -68,7 +68,7 @@ final class SpanishStudySheet {
                 value->SpanishStudyPrefs.setSubtitlePairBottom(activity,value)));
 
         TextView captionNote=new TextView(activity);
-        captionNote.setText("Professional bilingual layout: Spanish on top, English directly below, one line per language, and both switch on the same source-video clause boundary. Short sentences stay whole; longer speech is split at natural clause boundaries, targeting about 25–38 characters with a normal 42-character one-line ceiling. The pair position is saved and scales into the smaller portrait player. If YouTube CC is already on, turn it off once to avoid duplicate English subtitles.");
+        captionNote.setText("Paired bilingual layout: Spanish on top and the exact matching English source below. Both switch on one shared source-video event. Short sentences stay whole; longer speech prefers real punctuation and source timing pauses. If no trustworthy pause exists, the phrase stays together rather than being chopped at an arbitrary width. The pair position is saved and scales into the smaller portrait player.");
         captionNote.setTextColor(secondary);
         captionNote.setTextSize(12);
         captionNote.setPadding(0,Dim.dp8,0,Dim.dp12);
@@ -82,11 +82,24 @@ final class SpanishStudySheet {
         geminiRow.setOnClickListener(v->SpanishStudyController.configureGemini(activity));
         content.addView(geminiRow);
 
+        content.addView(section(activity,"Dub expression",secondary));
+        content.addView(switchRow(activity,fg,"Match source expression (experimental)",
+                "Gently follows reliable pitch and energy changes in the original speaker",
+                SpanishStudyController.sourceExpressionEnabled(activity),
+                checked->SpanishStudyController.setSourceExpressionEnabled(activity,checked)));
+
+        TextView expressionNote=new TextView(activity);
+        expressionNote.setText("This does not clone voices. It only transfers small relative pitch/energy movements to the selected Spanish Edge voice, with strong confidence checks and tight limits. Uncertain, silent, noisy, or rapidly changing audio falls back to neutral delivery. Android may ask for microphone permission because its playback Visualizer API requires RECORD_AUDIO; this feature attaches to YouTube's own playback audio session and does not save microphone or waveform audio. Speaker-specific voice switching is intentionally not enabled yet until we have a reliable speaker-embedding path that will not confuse yelling, whispering, or other delivery changes with a new person.");
+        expressionNote.setTextColor(secondary);
+        expressionNote.setTextSize(12);
+        expressionNote.setPadding(0,Dim.dp6,0,Dim.dp12);
+        content.addView(expressionNote);
+
         TextView audioNote=new TextView(activity);
-        audioNote.setText("Original-audio volume and max speech rate remain in Morphe's normal voice-over settings. The source video timeline remains authoritative; translated speech adapts to it rather than moving subtitle timing.");
+        audioNote.setText("Original-audio volume and max speech rate remain in Morphe's normal voice-over settings. Source expression is independent of synchronization: playback speed still adapts to the source timeline while pitch movement stays small and separately controlled.");
         audioNote.setTextColor(secondary);
         audioNote.setTextSize(12);
-        audioNote.setPadding(0,Dim.dp8,0,Dim.dp4);
+        audioNote.setPadding(0,Dim.dp4,0,Dim.dp4);
         content.addView(audioNote);
 
         content.addView(section(activity,"Vocabulary",secondary));
