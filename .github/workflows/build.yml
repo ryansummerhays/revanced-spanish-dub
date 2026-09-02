@@ -48,7 +48,6 @@ jobs:
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
           python3 scripts/patch_bilingual_subtitles.py upstream
-          python3 scripts/patch_study_sheet.py upstream
           python3 scripts/patch_autodub_timeline.py upstream
 
       - name: Build Morphe patch bundle
