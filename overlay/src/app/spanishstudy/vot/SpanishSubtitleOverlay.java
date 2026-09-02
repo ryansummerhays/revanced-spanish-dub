@@ -1,6 +1,7 @@
 package app.spanishstudy.vot;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -18,10 +19,13 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Displays one complete English source clause and its complete Spanish translation on one clock.
  *
- * v2.2.3 deliberately does NOT divide each language independently by word count. The source
- * transcript is split into compact semantic clauses before translation. Each clause is translated
- * 1:1, receives one immutable source time slot, and both boxes change on that same slot boundary.
- * Pausing therefore shows the complete meaning pair instead of two proportional word fragments.
+ * The source transcript is split into compact semantic clauses before translation. Each clause is
+ * translated 1:1, receives one immutable source time slot, and both boxes change on that exact slot
+ * boundary. Pausing therefore shows the complete meaning pair instead of proportional word slices.
+ *
+ * Position preferences are authored in landscape/full-player coordinates. In portrait, the same
+ * setting is mapped proportionally into YouTube's smaller 16:9 player area rather than being
+ * measured from the bottom of the whole phone screen.
  */
 final class SpanishSubtitleOverlay {
     private static Activity activity;
@@ -100,10 +104,7 @@ final class SpanishSubtitleOverlay {
         return timeMs >= source.startMs && timeMs < source.endMs ? sourceCursor : -1;
     }
 
-    /**
-     * Translation preserves 1:1 clause ordering. Timestamp lookup is retained as a safe fallback
-     * if a provider publishes an otherwise equivalent snapshot with a different list position.
-     */
+    /** Translation preserves 1:1 clause ordering; timestamps are a safe matching fallback. */
     private static TranscriptSegment matchingSpanish(int sourceIndex, TranscriptSegment source) {
         if (sourceIndex >= 0 && sourceIndex < spanishSegments.size()) {
             TranscriptSegment candidate = spanishSegments.get(sourceIndex);
@@ -141,8 +142,7 @@ final class SpanishSubtitleOverlay {
         view.setTextColor(Color.WHITE);
         view.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         view.setGravity(Gravity.CENTER);
-        // Clauses are intentionally compact, but allow a third line so no relevant words are
-        // silently clipped when Spanish expands relative to English.
+        // Allow a third line so Spanish expansion does not silently clip part of the paired idea.
         view.setMaxLines(3);
         view.setPadding(dp(a, 8), dp(a, 4), dp(a, 8), dp(a, 4));
         GradientDrawable bg = new GradientDrawable();
@@ -160,7 +160,7 @@ final class SpanishSubtitleOverlay {
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         lp.leftMargin = dp(a, 28);
         lp.rightMargin = dp(a, 28);
-        lp.bottomMargin = dp(a, bottomDp);
+        lp.bottomMargin = resolvedBottomMarginPx(a, bottomDp);
         a.addContentView(view, lp);
     }
 
@@ -175,12 +175,38 @@ final class SpanishSubtitleOverlay {
         ViewGroup.LayoutParams raw = view.getLayoutParams();
         if (raw instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) raw;
-            int wanted = dp(a, bottomDp);
+            int wanted = resolvedBottomMarginPx(a, bottomDp);
             if (lp.bottomMargin != wanted) {
                 lp.bottomMargin = wanted;
                 view.setLayoutParams(lp);
             }
         }
+    }
+
+    /**
+     * In landscape/fullscreen, a saved value is simply dp from the bottom of the player. In
+     * portrait, YouTube's video occupies approximately a 16:9 rectangle at the top of the content
+     * area. Convert the saved landscape distance into the same fraction of that smaller player's
+     * height, then offset from the phone bottom to the portrait player's bottom edge.
+     */
+    private static int resolvedBottomMarginPx(Activity a, int configuredBottomDp) {
+        final int basePx = dp(a, configuredBottomDp);
+        if (a.getResources().getConfiguration().orientation != Configuration.ORIENTATION_PORTRAIT) {
+            return basePx;
+        }
+
+        View content = a.findViewById(android.R.id.content);
+        int width = content == null ? 0 : content.getWidth();
+        int height = content == null ? 0 : content.getHeight();
+        if (width <= 0 || height <= 0 || height <= width) return basePx;
+
+        // Standard YouTube portrait watch player is 16:9 and full content width. Clamp in case a
+        // device/window is unusually short. The current portrait width closely matches the short
+        // dimension that the user's saved dp value was positioned against in landscape.
+        int playerHeight = Math.min(height, Math.round(width * 9f / 16f));
+        float playerScale = playerHeight / (float) Math.max(1, width);
+        int withinPlayer = Math.round(basePx * playerScale);
+        return Math.max(0, height - playerHeight + withinPlayer);
     }
 
     private static void detach(TextView view) {
