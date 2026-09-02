@@ -23,7 +23,19 @@ final class SpanishStudyPrefs {
             GEMINI_MODEL="gemini_model";
 
     private SpanishStudyPrefs(){}
-    private static SharedPreferences prefs(Context c){return c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);}
+
+    private static SharedPreferences prefs(Context c){
+        Context app=c==null?null:c.getApplicationContext();
+        Context stable=app!=null?app:c;
+        if(stable==null)throw new IllegalArgumentException("Context is required");
+        return stable.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+    }
+
+    // UI controls are saved synchronously. These values are tiny, and commit() guarantees the
+    // position/size/toggle chosen in the sheet is already on disk before Android kills the process.
+    private static void putBoolean(Context c,String key,boolean value){prefs(c).edit().putBoolean(key,value).commit();}
+    private static void putInt(Context c,String key,int value){prefs(c).edit().putInt(key,value).commit();}
+    private static void putString(Context c,String key,String value){prefs(c).edit().putString(key,value).commit();}
 
     static Set<String> knownWords(Context c){return new HashSet<>(prefs(c).getStringSet(KNOWN,Collections.emptySet()));}
     static boolean isKnown(Context c,String word){return knownWords(c).contains(VocabularyAnalyzer.normalize(word));}
@@ -31,30 +43,30 @@ final class SpanishStudyPrefs {
     static void clearKnown(Context c){prefs(c).edit().remove(KNOWN).apply();}
 
     static boolean showSubtitles(Context c){return prefs(c).getBoolean(SHOW_SUBS,true);}
-    static void setShowSubtitles(Context c,boolean v){prefs(c).edit().putBoolean(SHOW_SUBS,v).apply();}
+    static void setShowSubtitles(Context c,boolean v){putBoolean(c,SHOW_SUBS,v);}
     static boolean showEnglishSubtitles(Context c){return prefs(c).getBoolean(SHOW_ENGLISH_SUBS,false);}
-    static void setShowEnglishSubtitles(Context c,boolean v){prefs(c).edit().putBoolean(SHOW_ENGLISH_SUBS,v).apply();}
+    static void setShowEnglishSubtitles(Context c,boolean v){putBoolean(c,SHOW_ENGLISH_SUBS,v);}
 
     static int subtitleWords(Context c){return Math.max(4,Math.min(12,prefs(c).getInt(SUBTITLE_WORDS,7)));}
-    static void setSubtitleWords(Context c,int v){prefs(c).edit().putInt(SUBTITLE_WORDS,Math.max(4,Math.min(12,v))).apply();}
+    static void setSubtitleWords(Context c,int v){putInt(c,SUBTITLE_WORDS,Math.max(4,Math.min(12,v)));}
     static int subtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(SUBTITLE_TEXT_SIZE,12)));}
-    static void setSubtitleTextSize(Context c,int v){prefs(c).edit().putInt(SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v))).apply();}
+    static void setSubtitleTextSize(Context c,int v){putInt(c,SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v)));}
     static int englishSubtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(ENGLISH_SUBTITLE_TEXT_SIZE,11)));}
-    static void setEnglishSubtitleTextSize(Context c,int v){prefs(c).edit().putInt(ENGLISH_SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v))).apply();}
+    static void setEnglishSubtitleTextSize(Context c,int v){putInt(c,ENGLISH_SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v)));}
     static int spanishSubtitleBottom(Context c){return Math.max(24,Math.min(240,prefs(c).getInt(SPANISH_SUBTITLE_BOTTOM,72)));}
-    static void setSpanishSubtitleBottom(Context c,int v){prefs(c).edit().putInt(SPANISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v))).apply();}
+    static void setSpanishSubtitleBottom(Context c,int v){putInt(c,SPANISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v)));}
     static int englishSubtitleBottom(Context c){return Math.max(24,Math.min(240,prefs(c).getInt(ENGLISH_SUBTITLE_BOTTOM,118)));}
-    static void setEnglishSubtitleBottom(Context c,int v){prefs(c).edit().putInt(ENGLISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v))).apply();}
+    static void setEnglishSubtitleBottom(Context c,int v){putInt(c,ENGLISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v)));}
 
     static int vocabLimit(Context c){return Math.max(10,Math.min(100,prefs(c).getInt(VOCAB_LIMIT,40)));}
-    static void setVocabLimit(Context c,int v){prefs(c).edit().putInt(VOCAB_LIMIT,Math.max(10,Math.min(100,v))).apply();}
+    static void setVocabLimit(Context c,int v){putInt(c,VOCAB_LIMIT,Math.max(10,Math.min(100,v)));}
     static boolean includeCommon(Context c){return prefs(c).getBoolean(INCLUDE_COMMON,false);}
-    static void setIncludeCommon(Context c,boolean v){prefs(c).edit().putBoolean(INCLUDE_COMMON,v).apply();}
+    static void setIncludeCommon(Context c,boolean v){putBoolean(c,INCLUDE_COMMON,v);}
 
     static boolean geminiEnabled(Context c){return prefs(c).getBoolean(GEMINI_ENABLED,false);}
-    static void setGeminiEnabled(Context c,boolean v){prefs(c).edit().putBoolean(GEMINI_ENABLED,v).apply();}
+    static void setGeminiEnabled(Context c,boolean v){putBoolean(c,GEMINI_ENABLED,v);}
     static String geminiApiKey(Context c){return prefs(c).getString(GEMINI_API_KEY,"");}
-    static void setGeminiApiKey(Context c,String v){prefs(c).edit().putString(GEMINI_API_KEY,v==null?"":v.trim()).apply();}
+    static void setGeminiApiKey(Context c,String v){putString(c,GEMINI_API_KEY,v==null?"":v.trim());}
     static String geminiModel(Context c){String v=prefs(c).getString(GEMINI_MODEL,DEFAULT_GEMINI_MODEL);return v==null||v.isBlank()?DEFAULT_GEMINI_MODEL:v;}
-    static void setGeminiModel(Context c,String v){String n=v==null?"":v.trim();prefs(c).edit().putString(GEMINI_MODEL,n.isEmpty()?DEFAULT_GEMINI_MODEL:n).apply();}
+    static void setGeminiModel(Context c,String v){String n=v==null?"":v.trim();putString(c,GEMINI_MODEL,n.isEmpty()?DEFAULT_GEMINI_MODEL:n);}
 }
