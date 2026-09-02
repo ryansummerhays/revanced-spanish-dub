@@ -34,8 +34,6 @@ def main() -> None:
         "TranscriptFetcher study imports",
     )
 
-    # First create short semantic source slots. Translation receives this exact same list, so every
-    # English clause has one Spanish counterpart with the same immutable start/end timestamps.
     replace_once(
         fetcher,
         "        return mergeIntoSentences(lines);\n",
@@ -47,10 +45,11 @@ def main() -> None:
     /**
      * Converts sentence-sized source segments into compact semantic clause slots for bilingual
      * study. Timing is derived only from the English/source slot and is shared 1:1 by translation.
-     * We do not split when the source slot is too short to give every clause a readable duration.
+     * We do not split when the source slot is too short to give every clause a readable and
+     * speakable duration.
      */
     private static List<TranscriptSegment> splitIntoStudyClauses(List<TranscriptSegment> sentences) {
-        final long MIN_CLAUSE_SLOT_MS = 900;
+        final long MIN_CLAUSE_SLOT_MS = 1_500;
         List<TranscriptSegment> out = new ArrayList<>();
         for (TranscriptSegment sentence : sentences) {
             List<String> pieces = SemanticClauseSplitter.split(sentence.text);
