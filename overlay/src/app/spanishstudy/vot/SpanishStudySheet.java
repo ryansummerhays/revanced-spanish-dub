@@ -49,32 +49,29 @@ final class SpanishStudySheet {
 
         content.addView(section(activity,"Subtitles",secondary));
         content.addView(switchRow(activity,fg,"Spanish subtitles",
-                "Translated text matched to the Spanish dub",
+                "Complete translated clause matched to the dub",
                 SpanishStudyPrefs.showSubtitles(activity),
                 checked->SpanishStudyPrefs.setShowSubtitles(activity,checked)));
         content.addView(switchRow(activity,fg,"English subtitles",
-                "Original English YouTube transcript rendered by this patch",
+                "Complete matching English source clause",
                 SpanishStudyPrefs.showEnglishSubtitles(activity),
                 checked->SpanishStudyPrefs.setShowEnglishSubtitles(activity,checked)));
 
         content.addView(sliderRow(activity,fg,"Spanish text size","sp",8,18,
                 SpanishStudyPrefs.subtitleTextSize(activity),
                 value->SpanishStudyPrefs.setSubtitleTextSize(activity,value)));
-        content.addView(sliderRow(activity,fg,"Spanish vertical position","dp from bottom",24,240,
+        content.addView(sliderRow(activity,fg,"Spanish vertical position","dp",24,240,
                 SpanishStudyPrefs.spanishSubtitleBottom(activity),
                 value->SpanishStudyPrefs.setSpanishSubtitleBottom(activity,value)));
         content.addView(sliderRow(activity,fg,"English text size","sp",8,18,
                 SpanishStudyPrefs.englishSubtitleTextSize(activity),
                 value->SpanishStudyPrefs.setEnglishSubtitleTextSize(activity,value)));
-        content.addView(sliderRow(activity,fg,"English vertical position","dp from bottom",24,240,
+        content.addView(sliderRow(activity,fg,"English vertical position","dp",24,240,
                 SpanishStudyPrefs.englishSubtitleBottom(activity),
                 value->SpanishStudyPrefs.setEnglishSubtitleBottom(activity,value)));
-        content.addView(sliderRow(activity,fg,"Words shown at once","words",4,12,
-                SpanishStudyPrefs.subtitleWords(activity),
-                value->SpanishStudyPrefs.setSubtitleWords(activity,value)));
 
         TextView captionNote=new TextView(activity);
-        captionNote.setText("English and Spanish now share the same source-video segment and chunk clock, so both boxes change together. If YouTube's own CC is already on for the current video, turn CC off once to avoid a duplicate English line.");
+        captionNote.setText("English and Spanish are shown as complete matched clauses instead of independent word-count chunks. Both boxes switch on the same source-video boundary. Position settings are saved and automatically mapped into the smaller video frame in portrait mode. If YouTube CC is already on, turn it off once to avoid duplicate English subtitles.");
         captionNote.setTextColor(secondary);
         captionNote.setTextSize(12);
         captionNote.setPadding(0,Dim.dp8,0,Dim.dp12);
@@ -89,7 +86,7 @@ final class SpanishStudySheet {
         content.addView(geminiRow);
 
         TextView audioNote=new TextView(activity);
-        audioNote.setText("Original-audio volume remains in Morphe's normal voice-over settings, so it is not duplicated here.");
+        audioNote.setText("Original-audio volume and max speech rate remain in Morphe's normal voice-over settings.");
         audioNote.setTextColor(secondary);
         audioNote.setTextSize(12);
         audioNote.setPadding(0,Dim.dp8,0,Dim.dp4);
