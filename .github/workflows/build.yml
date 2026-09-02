@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.3.1 patch bundle
+name: Build Spanish Dub Study v2.3.2 patch bundle
 
 on:
   workflow_dispatch:
@@ -40,22 +40,26 @@ jobs:
             overlay/src/app/spanishstudy/vot/VocabularyAnalyzer.java \
             overlay/src/app/spanishstudy/vot/SemanticClauseSplitter.java \
             overlay/src/app/spanishstudy/vot/TranslationAlignmentGuard.java \
+            overlay/src/app/spanishstudy/vot/TranscriptCorrectionStore.java \
             overlay/src/app/spanishstudy/vot/SourceExpressionMath.java \
             tests/VocabularyAnalyzerTest.java \
             tests/SemanticClauseSplitterTest.java \
             tests/TranslationAlignmentGuardTest.java \
+            tests/TranscriptCorrectionStoreTest.java \
             tests/SourceExpressionMathTest.java \
             tests/WholeTranscriptDesignTest.java
           java -cp /tmp/spanish-study-test VocabularyAnalyzerTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SemanticClauseSplitterTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranscriptCorrectionStoreTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.3.1 overlay
+      - name: Apply Spanish study v2.3.2 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
+          python3 scripts/patch_video_context.py upstream
           python3 scripts/patch_natural_speech_boundaries.py upstream
           python3 scripts/patch_bilingual_subtitles.py upstream
           python3 scripts/patch_autodub_timeline.py upstream
@@ -73,7 +77,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.3.1 bundle
+      - name: Rebrand and package v2.3.2 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -82,8 +86,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.3.1.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.1\nDescription: Subtitle reliability update on top of v2.3.0. Long bilingual semantic events now wrap to a small number of centered lines instead of silently clipping at the player edge, preserving the complete pause-able English/Spanish pair. Spanish results rejected as untranslated English receive an immediate single-line Google rescue attempt before the slot is allowed to remain untranslated, reducing brief returns to normal source audio. Retains opt-in conservative source-expression matching, immutable source-ID translation alignment, natural punctuation/timing phrase boundaries, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.3.2.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.2\nDescription: Context-aware transcript reliability update. Gemini now receives YouTube title, creator/channel and a capped description from the same Innertube response already used to locate captions, plus the complete raw timed transcript. Its prompt explicitly infers domain vocabulary, names, slang, game/technical jargon and likely ASR mistakes before translating, while keeping the raw source as an immutable alignment checksum. A conservative correctedSource field can repair high-confidence English caption mistakes for display (for example niche item names) without changing source timing/IDs. Long/multi-sentence events are recursively split at genuine punctuation anywhere in the event, punctuation-free ASR uses real caption pauses more effectively, and unusually long natural subtitles wrap instead of clipping. Rejected untranslated-Spanish slots receive a one-line rescue translation before falling silent. Retains conservative source-expression matching, immutable source-ID translation alignment, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.2\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -98,7 +102,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.3.1
+          name: spanish-dub-study-patches-v2.3.2
           path: dist/
           if-no-files-found: error
           retention-days: 30
