@@ -6,17 +6,20 @@ import java.util.List;
 /**
  * Splits source subtitle text into short, meaning-preserving clauses.
  *
- * The goal is not word-count equality between languages. Instead, each source slot should contain
- * one compact sentence/clause that can be translated 1:1 and normally fit on one subtitle line in
- * both languages. Short sentences stay whole; longer sentences split at natural clause boundaries.
+ * Policy for the bilingual study overlay:
+ * - keep a complete short sentence when it already fits one line;
+ * - otherwise prefer punctuation/clause boundaries over arbitrary word counts;
+ * - aim for roughly 25-38 characters and treat ~42 characters as the normal one-line ceiling;
+ * - preserve every source word and never split inside a word.
+ *
+ * The English/source segmentation is authoritative. Gemini then translates every source unit 1:1,
+ * so Spanish and English always represent the same semantic unit on the same video timestamp.
  */
 public final class SemanticClauseSplitter {
-    // Tuned for one-line bilingual study subtitles. Spanish often expands relative to English, so
-    // keep the English source slot comfortably shorter than a normal two-line caption.
-    private static final int TARGET_CHARS = 46;
-    private static final int SOFT_MAX_CHARS = 54;
-    private static final int HARD_MAX_CHARS = 68;
-    private static final int MIN_CLAUSE_CHARS = 16;
+    public static final int TARGET_CHARS = 32;
+    public static final int SOFT_MAX_CHARS = 38;
+    public static final int HARD_MAX_CHARS = 42;
+    private static final int MIN_CLAUSE_CHARS = 10;
 
     private static final String[] CONJUNCTIONS = {
             " and ", " but ", " because ", " so ", " while ", " although ", " though ",
