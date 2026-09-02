@@ -24,8 +24,8 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
  * boundary. Pausing therefore shows the complete meaning pair instead of proportional word slices.
  *
  * Position preferences are authored in landscape/full-player coordinates. In portrait, the same
- * setting is mapped proportionally into YouTube's smaller 16:9 player area rather than being
- * measured from the bottom of the whole phone screen.
+ * setting is mapped proportionally into YouTube's actual smaller player-controls rectangle instead
+ * of being measured from the bottom of the whole phone screen.
  */
 final class SpanishSubtitleOverlay {
     private static Activity activity;
@@ -184,10 +184,10 @@ final class SpanishSubtitleOverlay {
     }
 
     /**
-     * In landscape/fullscreen, a saved value is simply dp from the bottom of the player. In
-     * portrait, YouTube's video occupies approximately a 16:9 rectangle at the top of the content
-     * area. Convert the saved landscape distance into the same fraction of that smaller player's
-     * height, then offset from the phone bottom to the portrait player's bottom edge.
+     * Landscape/fullscreen uses the saved dp value directly. In portrait we find YouTube's actual
+     * player-controls view, scale the saved landscape distance by the current player height, and
+     * anchor the result to the real player bottom. If the controls view has not been created yet,
+     * fall back to a standard full-width 16:9 player estimate until it becomes available.
      */
     private static int resolvedBottomMarginPx(Activity a, int configuredBottomDp) {
         final int basePx = dp(a, configuredBottomDp);
@@ -200,13 +200,32 @@ final class SpanishSubtitleOverlay {
         int height = content == null ? 0 : content.getHeight();
         if (width <= 0 || height <= 0 || height <= width) return basePx;
 
-        // Standard YouTube portrait watch player is 16:9 and full content width. Clamp in case a
-        // device/window is unusually short. The current portrait width closely matches the short
-        // dimension that the user's saved dp value was positioned against in landscape.
-        int playerHeight = Math.min(height, Math.round(width * 9f / 16f));
+        int playerHeight = 0;
+        int playerBottom = 0;
+        View player = SpanishStudyController.playerControlsView();
+        if (player != null && player.getWidth() > 0 && player.getHeight() > 0) {
+            int[] contentPos = new int[2];
+            int[] playerPos = new int[2];
+            content.getLocationInWindow(contentPos);
+            player.getLocationInWindow(playerPos);
+            playerHeight = player.getHeight();
+            playerBottom = playerPos[1] - contentPos[1] + playerHeight;
+            if (playerBottom <= 0 || playerBottom > height + playerHeight) {
+                playerHeight = 0;
+                playerBottom = 0;
+            }
+        }
+
+        if (playerHeight <= 0) {
+            playerHeight = Math.min(height, Math.round(width * 9f / 16f));
+            playerBottom = playerHeight;
+        }
+
+        // Current portrait width is approximately the device's short landscape dimension, which
+        // is the natural reference height for the dp position chosen in fullscreen landscape.
         float playerScale = playerHeight / (float) Math.max(1, width);
         int withinPlayer = Math.round(basePx * playerScale);
-        return Math.max(0, height - playerHeight + withinPlayer);
+        return Math.max(0, height - playerBottom + withinPlayer);
     }
 
     private static void detach(TextView view) {
