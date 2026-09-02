@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wire paired semantic English/Spanish subtitles into Morphe and suppress duplicate auto-CC."""
+"""Wire paired natural-phrase English/Spanish subtitles into Morphe and suppress duplicate auto-CC."""
 from __future__ import annotations
 
 import sys
@@ -38,33 +38,55 @@ def main() -> None:
         fetcher,
         "        return mergeIntoSentences(lines);\n",
         "        return splitIntoStudyClauses(mergeIntoSentences(lines));\n",
-        "split merged source transcript into semantic clauses",
+        "split merged source transcript into natural semantic phrases",
     )
 
     clause_method = r'''
     /**
-     * Converts sentence-sized source segments into compact semantic subtitle events.
+     * Converts source sentences into paired natural-phrase subtitle events.
      *
-     * Professional subtitle timing commonly avoids flashes shorter than about 5/6 second. We use
-     * 833 ms as the preferred minimum whenever the source span has enough room for it. Fast source
-     * speech can make that mathematically impossible; in that case semantic one-line boundaries and
-     * exact source synchronization take precedence rather than abandoning the split and showing an
-     * oversized multi-line sentence.
-     *
-     * The English/source timeline is authoritative. Translation receives this exact list 1:1, so
-     * English and Spanish always switch on the same event boundary.
+     * We prefer ~833 ms minimum visibility. If a fast sentence contains more natural phrase breaks
+     * than its source duration can display cleanly, adjacent phrases are merged again rather than
+     * creating flashes or forcing the dub to stop at every tiny clause. This preserves the natural
+     * punctuation/meaning structure while keeping the English and Spanish pair on one shared clock.
      */
     private static List<TranscriptSegment> splitIntoStudyClauses(List<TranscriptSegment> sentences) {
         final long STANDARD_MIN_EVENT_MS = 833;
         List<TranscriptSegment> out = new ArrayList<>();
         for (TranscriptSegment sentence : sentences) {
-            List<String> pieces = SemanticClauseSplitter.split(sentence.text);
+            List<String> pieces = new ArrayList<>(SemanticClauseSplitter.split(sentence.text));
             if (pieces.size() <= 1) {
                 out.add(sentence);
                 continue;
             }
 
             final long span = Math.max(1L, sentence.endMs - sentence.startMs);
+            final int maxReadablePieces = Math.max(1, (int) (span / STANDARD_MIN_EVENT_MS));
+
+            // A fast speaker may deliver several comma-sized ideas in under two seconds. Showing
+            // each as its own event would create subtitle flashes and chopped TTS. Merge the least
+            // costly adjacent pair until every event can receive a professional-ish display slot.
+            while (pieces.size() > maxReadablePieces && pieces.size() > 1) {
+                int bestAt = 0;
+                int bestCombinedLength = Integer.MAX_VALUE;
+                for (int i = 0; i + 1 < pieces.size(); i++) {
+                    int combined = pieces.get(i).length() + 1 + pieces.get(i + 1).length();
+                    if (combined < bestCombinedLength) {
+                        bestCombinedLength = combined;
+                        bestAt = i;
+                    }
+                }
+                String merged = (pieces.get(bestAt) + " " + pieces.get(bestAt + 1))
+                        .replaceAll("\\s+", " ").trim();
+                pieces.set(bestAt, merged);
+                pieces.remove(bestAt + 1);
+            }
+
+            if (pieces.size() <= 1) {
+                out.add(sentence);
+                continue;
+            }
+
             final long minimumSlot = span >= pieces.size() * STANDARD_MIN_EVENT_MS
                     ? STANDARD_MIN_EVENT_MS : 1L;
 
@@ -99,7 +121,7 @@ def main() -> None:
         fetcher,
         "    private static boolean detectPunctuation(List<TranscriptSegment> lines) {\n",
         clause_method + "    private static boolean detectPunctuation(List<TranscriptSegment> lines) {\n",
-        "add standards-based semantic clause timing mapper",
+        "add natural phrase timing mapper",
     )
 
     replace_once(
@@ -129,7 +151,7 @@ def main() -> None:
         "suppress duplicate YouTube auto captions",
     )
 
-    print("Professional paired bilingual subtitle integration complete")
+    print("Natural paired bilingual subtitle integration complete")
 
 
 if __name__ == "__main__":
