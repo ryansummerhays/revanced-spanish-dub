@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Make an enabled VoT session actually load on every video/player transition.
-
-Morphe can receive newVideoLoaded while the player is INLINE_MINIMAL. Upstream intentionally skips
-loading in that state, but previously never retried when the same video became the normal player.
-That leaves the button looking enabled while no transcript is loaded until the user toggles it off/on.
-"""
+"""Make an enabled VoT session load on every video and expose the real player bounds."""
 from __future__ import annotations
 
 import sys
@@ -38,6 +33,27 @@ def main() -> None:
         "retry transcript load when active player appears",
     )
 
+    replace_once(
+        button,
+        "import app.morphe.extension.youtube.settings.Settings;\n",
+        "import app.morphe.extension.youtube.settings.Settings;\nimport app.spanishstudy.vot.SpanishStudyController;\n",
+        "player button study import",
+    )
+
+    replace_once(
+        button,
+        '''            if (LegacyPlayerControlsPatch.RESTORE_OLD_PLAYER_BUTTONS || !Settings.VOT_ENABLED.get()) return;\n\n            VoiceOverTranslationPatch.addOnTranslationStateChangeCallback(''',
+        '''            if (LegacyPlayerControlsPatch.RESTORE_OLD_PLAYER_BUTTONS || !Settings.VOT_ENABLED.get()) return;\n            SpanishStudyController.onPlayerControlsView(controlsView);\n\n            VoiceOverTranslationPatch.addOnTranslationStateChangeCallback(''',
+        "capture modern player controls bounds",
+    )
+
+    replace_once(
+        button,
+        '''            if (!LegacyPlayerControlsPatch.RESTORE_OLD_PLAYER_BUTTONS) return;\n\n            VoiceOverTranslationPatch.addOnTranslationStateChangeCallback(''',
+        '''            if (!LegacyPlayerControlsPatch.RESTORE_OLD_PLAYER_BUTTONS) return;\n            SpanishStudyController.onPlayerControlsView(controlsView);\n\n            VoiceOverTranslationPatch.addOnTranslationStateChangeCallback(''',
+        "capture legacy player controls bounds",
+    )
+
     # Make the icon distinguish OFF, enabled-but-loading/not-ready, and actually active.
     replace_once(
         button,
@@ -46,7 +62,7 @@ def main() -> None:
         "show loading versus active button state",
     )
 
-    print("VoT per-video autostart integration complete")
+    print("VoT per-video autostart/player-bounds integration complete")
 
 
 if __name__ == "__main__":
