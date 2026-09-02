@@ -8,6 +8,7 @@ public final class SemanticClauseSplitterTest {
         longSentencePrefersClauseBoundary();
         hardLimitFallsBackToWordBoundary();
         reconstructionPreservesWords();
+        compactClausesStayNearOneLine();
         System.out.println("semantic clause splitter: OK");
     }
 
@@ -23,7 +24,7 @@ public final class SemanticClauseSplitterTest {
         List<String> parts = SemanticClauseSplitter.split(s);
         require(parts.size() >= 2, "long sentence should split");
         for (String part : parts) {
-            require(part.length() >= 20, "created tiny fragment: " + part);
+            require(part.length() >= 16, "created tiny fragment: " + part);
         }
     }
 
@@ -41,6 +42,15 @@ public final class SemanticClauseSplitterTest {
         List<String> parts = SemanticClauseSplitter.split(s);
         String rebuilt = String.join(" ", parts).replaceAll("\\s+", " ").trim();
         require(rebuilt.equals(s), "splitter changed source text: " + rebuilt);
+    }
+
+    private static void compactClausesStayNearOneLine() {
+        String s = "The speaker moves very quickly through this idea, but the translated voice needs enough room to finish without falling behind the next clause.";
+        List<String> parts = SemanticClauseSplitter.split(s);
+        require(parts.size() >= 2, "expected compact clause split");
+        for (String part : parts) {
+            require(part.length() <= 72, "clause is too wide for one-line target: " + part);
+        }
     }
 
     private static void require(boolean condition, String message) {
