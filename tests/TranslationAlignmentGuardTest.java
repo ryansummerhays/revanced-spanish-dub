@@ -7,6 +7,9 @@ public final class TranslationAlignmentGuardTest {
         exactPairPasses();
         wrongSourceEchoFails();
         neighboringWeaponLeakFails();
+        copiedEnglishFailsSpanishGuard();
+        differentEnglishSentenceFailsSpanishGuard();
+        shortAmbiguousTokenIsAllowed();
         System.out.println("translation alignment guard: OK");
     }
 
@@ -35,6 +38,24 @@ public final class TranslationAlignmentGuardTest {
                 List.of("Let's try it with the R-9.", "That feels much better.")));
     }
 
+    /** Reproduces English source text being sent through the Spanish TTS voice. */
+    private static void copiedEnglishFailsSpanishGuard() {
+        require(!TranslationAlignmentGuard.isSafeSpanishTranslation(
+                "Let's try it with the R-9.", "Let's try it with the R-9."),
+                "copied English should never be tagged as Spanish");
+    }
+
+    private static void differentEnglishSentenceFailsSpanishGuard() {
+        require(!TranslationAlignmentGuard.isSafeSpanishTranslation(
+                "Probemos esto.", "What is the best way to do this now?"),
+                "clearly English output should never be tagged as Spanish");
+    }
+
+    private static void shortAmbiguousTokenIsAllowed() {
+        require(TranslationAlignmentGuard.isSafeSpanishTranslation("Okay.", "OK."),
+                "short language-neutral tokens should not be over-filtered");
+    }
+
     private static void expectFailure(Runnable action) {
         boolean failed = false;
         try {
@@ -43,5 +64,9 @@ public final class TranslationAlignmentGuardTest {
             failed = true;
         }
         if (!failed) throw new AssertionError("expected alignment validation to fail");
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) throw new AssertionError(message);
     }
 }
