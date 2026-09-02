@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.2.7 patch bundle
+name: Build Spanish Dub Study v2.3.0 patch bundle
 
 on:
   workflow_dispatch:
@@ -40,16 +40,19 @@ jobs:
             overlay/src/app/spanishstudy/vot/VocabularyAnalyzer.java \
             overlay/src/app/spanishstudy/vot/SemanticClauseSplitter.java \
             overlay/src/app/spanishstudy/vot/TranslationAlignmentGuard.java \
+            overlay/src/app/spanishstudy/vot/SourceExpressionMath.java \
             tests/VocabularyAnalyzerTest.java \
             tests/SemanticClauseSplitterTest.java \
             tests/TranslationAlignmentGuardTest.java \
+            tests/SourceExpressionMathTest.java \
             tests/WholeTranscriptDesignTest.java
           java -cp /tmp/spanish-study-test VocabularyAnalyzerTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SemanticClauseSplitterTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.2.7 overlay
+      - name: Apply Spanish study v2.3.0 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -60,6 +63,7 @@ jobs:
           python3 scripts/patch_autostart_session.py upstream
           python3 scripts/patch_live_speech_rate.py upstream
           python3 scripts/patch_translation_language_guard.py upstream
+          python3 scripts/patch_source_expression.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -69,7 +73,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.2.7 bundle
+      - name: Rebrand and package v2.3.0 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -78,8 +82,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.2.7.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.7\nDescription: Natural-phrase real-time dubbing and paired bilingual subtitles. Speech blocks now prefer actual punctuation and caption-timing pauses, arbitrary width-based mid-thought cuts are removed, and active TTS is allowed to finish its natural phrase instead of being chopped at every subtitle boundary. Gemini translations remain keyed to immutable source IDs with exact source echoes and alignment checks; clearly English/untranslated text is rejected before Spanish subtitle/TTS playback. Includes one-line Spanish-over-English paired subtitles, source-timeline catch-up after completed phrases, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.7\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.3.0.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.0\nDescription: Natural-phrase real-time Spanish dubbing with paired bilingual subtitles plus opt-in source-expression matching. The selected Spanish Edge voice can gently follow reliable relative pitch and energy movement from YouTube's own playback audio while keeping synchronization speed independent; source expression is tightly bounded, confidence-gated, adapts to sustained voice changes, and fails neutral when audio is uncertain. No source waveform is saved or transmitted. Speaker-specific voice switching remains intentionally disabled until a reliable speaker-embedding/PCM path can meet conservative false-switch requirements. Includes immutable source-ID translation alignment, English-result rejection before Spanish TTS, natural punctuation/timing phrase boundaries, portrait-responsive subtitles, live speech-rate changes, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -94,7 +98,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.2.7
+          name: spanish-dub-study-patches-v2.3.0
           path: dist/
           if-no-files-found: error
           retention-days: 30
