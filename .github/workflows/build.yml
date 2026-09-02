@@ -42,7 +42,9 @@ jobs:
           java -cp /tmp/spanish-study-test VocabularyAnalyzerTest
 
       - name: Apply Spanish study v2 overlay
-        run: python3 scripts/apply_overlay.py upstream overlay/src
+        run: |
+          python3 scripts/apply_overlay.py upstream overlay/src
+          python3 scripts/patch_provider_picker.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
