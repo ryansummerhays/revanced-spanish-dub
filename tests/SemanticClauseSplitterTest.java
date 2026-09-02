@@ -5,11 +5,11 @@ import java.util.List;
 public final class SemanticClauseSplitterTest {
     public static void main(String[] args) {
         shortSentenceStaysWhole();
-        longSentencePrefersClauseBoundary();
-        hardLimitFallsBackToWordBoundary();
+        longSentencePrefersPunctuationPause();
+        unpunctuatedThoughtDoesNotGetArbitrarilyChopped();
+        strongConjunctionCanSplitVeryLongThought();
         reconstructionPreservesWords();
-        normalClausesStayWithinOneLineCeiling();
-        targetRangeIsProfessionalOneLineRange();
+        weakRelativeClauseIsNotPreferredBoundary();
         System.out.println("semantic clause splitter: OK");
     }
 
@@ -20,24 +20,29 @@ public final class SemanticClauseSplitterTest {
         require(parts.get(0).equals(s), "short sentence changed");
     }
 
-    private static void longSentencePrefersClauseBoundary() {
+    private static void longSentencePrefersPunctuationPause() {
         String s = "I wanted to finish the project before dinner, but the last experiment took much longer than expected, so I stayed another hour to make sure the result was real.";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 3, "long sentence should split into compact semantic units");
+        require(parts.size() >= 2, "long punctuated sentence should split at a natural pause");
+        require(parts.get(0).endsWith(","), "first split should preserve the punctuation pause");
         for (String part : parts) {
-            require(part.length() >= 10, "created tiny fragment: " + part);
+            require(part.length() >= 12, "created tiny fragment: " + part);
         }
     }
 
-    private static void hardLimitFallsBackToWordBoundary() {
-        String s = "This is a deliberately long unpunctuated stretch of speech where the caption source gives us no commas or sentence marks and we still need a readable compact subtitle without chopping a word in half at an arbitrary character position";
+    private static void unpunctuatedThoughtDoesNotGetArbitrarilyChopped() {
+        String s = "This deliberately long unpunctuated spoken thought has no trustworthy pause cue anywhere near the display target and should remain intact instead of making the voice stop at some random width boundary";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 4, "hard-max fallback did not split enough");
-        for (String part : parts) {
-            require(!part.startsWith(" ") && !part.endsWith(" "), "bad whitespace");
-            require(part.length() <= SemanticClauseSplitter.HARD_MAX_CHARS,
-                    "ordinary clause exceeded one-line ceiling: " + part);
-        }
+        require(parts.size() == 1,
+                "unpunctuated thought should remain whole when no natural pause exists");
+    }
+
+    private static void strongConjunctionCanSplitVeryLongThought() {
+        String s = "I kept trying the same setup for much longer than I expected because the first few results looked inconsistent enough that I wanted another clean comparison before changing anything";
+        List<String> parts = SemanticClauseSplitter.split(s);
+        require(parts.size() >= 2, "strong conjunction should provide a natural fallback boundary");
+        require(parts.get(1).toLowerCase().startsWith("because "),
+                "following phrase should begin with its conjunction");
     }
 
     private static void reconstructionPreservesWords() {
@@ -47,23 +52,15 @@ public final class SemanticClauseSplitterTest {
         require(rebuilt.equals(s), "splitter changed source text: " + rebuilt);
     }
 
-    private static void normalClausesStayWithinOneLineCeiling() {
-        String s = "The speaker moves very quickly through this idea, but the translated voice needs enough room to finish without falling behind the next clause.";
+    private static void weakRelativeClauseIsNotPreferredBoundary() {
+        String s = "This is the controller that I bought after watching the review which explained the buttons that matter most during normal play";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 3, "expected compact clause split");
-        for (String part : parts) {
-            require(part.length() <= 42, "clause is too wide for normal one-line target: " + part);
+        // "that/which/who" used to be treated as generic split points and produced unnatural TTS.
+        for (int i = 1; i < parts.size(); i++) {
+            String p = parts.get(i).toLowerCase();
+            require(!p.startsWith("that ") && !p.startsWith("which ") && !p.startsWith("who "),
+                    "weak relative clause should not be chosen as a speech pause");
         }
-    }
-
-    private static void targetRangeIsProfessionalOneLineRange() {
-        require(SemanticClauseSplitter.TARGET_CHARS >= 25
-                        && SemanticClauseSplitter.TARGET_CHARS <= 38,
-                "target should stay in the compact bilingual one-line range");
-        require(SemanticClauseSplitter.SOFT_MAX_CHARS <= 38,
-                "soft max should not exceed the preferred bilingual range");
-        require(SemanticClauseSplitter.HARD_MAX_CHARS == 42,
-                "normal Latin-script one-line ceiling should be 42 chars");
     }
 
     private static void require(boolean condition, String message) {
