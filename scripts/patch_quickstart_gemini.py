@@ -38,13 +38,15 @@ def main() -> None:
         "prepare full Gemini context without blocking playback",
     )
 
-    # The first Gemini batch is still capped by the existing 350-character fast-start rule. Larger
-    # follow-up batches reduce request overhead while they complete in the background.
+    # The first Gemini batch is still capped by Morphe's existing 350-character fast-start rule.
+    # Keep later batches modest as well: with one-line semantic clauses, a 4k batch can contain well
+    # over 100 subtitle events, which makes an LLM positional shift much more likely. 1.2k normally
+    # holds a few dozen events while preserving progressive background throughput.
     replace_once(
         translator,
         "    private static final int GEMINI_MAX_BATCH_CHARS = 900;\n",
-        "    private static final int GEMINI_MAX_BATCH_CHARS = 4_000;\n",
-        "larger Gemini background batches",
+        "    private static final int GEMINI_MAX_BATCH_CHARS = 1_200;\n",
+        "alignment-safe Gemini background batches",
     )
 
     # patch_autodub_timeline.py removed the per-batch Gemini delegate because v2.2 was blocking on
