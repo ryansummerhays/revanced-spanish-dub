@@ -25,9 +25,10 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Direct Gemini transcript translator for the Spanish-study overlay.
  *
- * v2.2.4 keeps the complete source transcript available as context while translating compact
- * source-language semantic clauses 1:1. Playback can still start progressively; a slow/failed
- * Gemini request falls back to Morphe's Google translator for that block.
+ * v2.2.5 keeps complete source-transcript context while translating short semantic events 1:1.
+ * The prompt optimizes for isochronous dubbing plus professional one-line bilingual subtitles.
+ * Playback can still start progressively; a slow/failed Gemini request falls back to Morphe's
+ * Google translator for that block.
  */
 public final class GeminiTranslator {
     private static final int CONNECT_TIMEOUT_MS = 7_000;
@@ -261,11 +262,11 @@ public final class GeminiTranslator {
                     .append(targetLang).append(". ");
         }
         prompt.append("Use the COMPLETE transcript below to resolve names, jokes, pronouns, terminology, speaker intent, and recurring phrases. ")
-                .append("Each ID is already a short semantic sentence or clause and is paired with the source-language subtitle for exactly that timestamp slot. ")
+                .append("Each ID is already one short semantic sentence or clause and is paired with the source-language subtitle for exactly that timestamp slot. ")
                 .append("CRITICAL ALIGNMENT RULE: translate only the meaning contained in that ID. Do not move, borrow, postpone, anticipate, merge, or redistribute meaning across neighboring IDs. ")
                 .append("The translated string must be a complete semantic counterpart to the English source string for that same ID so a learner can pause on one frame and compare them directly. ")
                 .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers, and wordy literal constructions. Use concise idiomatic equivalents so the spoken translation can finish inside the source timestamp instead of spilling into the next clause. ")
-                .append("SUBTITLE RULE: keep the translated clause compact enough to fit on one subtitle line whenever natural phrasing permits. ")
+                .append("BILINGUAL SUBTITLE RULE: Spanish is the target-language top line and English is the matching source line below it. The translated string must fit one line whenever meaning can be preserved. Aim for roughly 25-38 characters including spaces and punctuation; treat 42 characters as the normal one-line ceiling. If an exact natural equivalent would exceed that, compress wording idiomatically before exceeding the ceiling. Never omit required meaning merely to satisfy the character target. ")
                 .append("Do not summarize or omit meaning. Preserve tone, profanity strength, names, gamer tags, numbers, and domain-specific terminology. ")
                 .append("Return exactly one translated string for each requested ID, in ascending ID order.\n\n")
                 .append(fullContext)
