@@ -43,13 +43,19 @@ def main() -> None:
 
     clause_method = r'''
     /**
-     * Converts sentence-sized source segments into compact semantic clause slots for bilingual
-     * study. Timing is derived only from the English/source slot and is shared 1:1 by translation.
-     * We do not split when the source slot is too short to give every clause a readable and
-     * speakable duration.
+     * Converts sentence-sized source segments into compact semantic subtitle events.
+     *
+     * Professional subtitle timing commonly avoids flashes shorter than about 5/6 second. We use
+     * 833 ms as the preferred minimum whenever the source span has enough room for it. Fast source
+     * speech can make that mathematically impossible; in that case semantic one-line boundaries and
+     * exact source synchronization take precedence rather than abandoning the split and showing an
+     * oversized multi-line sentence.
+     *
+     * The English/source timeline is authoritative. Translation receives this exact list 1:1, so
+     * English and Spanish always switch on the same event boundary.
      */
     private static List<TranscriptSegment> splitIntoStudyClauses(List<TranscriptSegment> sentences) {
-        final long MIN_CLAUSE_SLOT_MS = 1_500;
+        final long STANDARD_MIN_EVENT_MS = 833;
         List<TranscriptSegment> out = new ArrayList<>();
         for (TranscriptSegment sentence : sentences) {
             List<String> pieces = SemanticClauseSplitter.split(sentence.text);
@@ -59,10 +65,8 @@ def main() -> None:
             }
 
             final long span = Math.max(1L, sentence.endMs - sentence.startMs);
-            if (span < pieces.size() * MIN_CLAUSE_SLOT_MS) {
-                out.add(sentence);
-                continue;
-            }
+            final long minimumSlot = span >= pieces.size() * STANDARD_MIN_EVENT_MS
+                    ? STANDARD_MIN_EVENT_MS : 1L;
 
             int totalWeight = 0;
             for (String piece : pieces) totalWeight += Math.max(1, piece.length());
@@ -79,8 +83,8 @@ def main() -> None:
                 } else {
                     pieceEnd = sentence.startMs + Math.round(span
                             * (consumedWeight / (double) totalWeight));
-                    final long minEnd = cursor + MIN_CLAUSE_SLOT_MS;
-                    final long maxEnd = sentence.endMs - remaining * MIN_CLAUSE_SLOT_MS;
+                    final long minEnd = cursor + minimumSlot;
+                    final long maxEnd = sentence.endMs - remaining * minimumSlot;
                     pieceEnd = Math.max(minEnd, Math.min(maxEnd, pieceEnd));
                 }
                 out.add(new TranscriptSegment(cursor, pieceEnd, piece, sentence.lang));
@@ -95,7 +99,7 @@ def main() -> None:
         fetcher,
         "    private static boolean detectPunctuation(List<TranscriptSegment> lines) {\n",
         clause_method + "    private static boolean detectPunctuation(List<TranscriptSegment> lines) {\n",
-        "add semantic clause timing mapper",
+        "add standards-based semantic clause timing mapper",
     )
 
     replace_once(
@@ -125,7 +129,7 @@ def main() -> None:
         "suppress duplicate YouTube auto captions",
     )
 
-    print("Paired semantic bilingual subtitle integration complete")
+    print("Professional paired bilingual subtitle integration complete")
 
 
 if __name__ == "__main__":
