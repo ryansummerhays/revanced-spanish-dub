@@ -15,7 +15,7 @@ public final class SourceExpressionMath {
     public static final float MAX_VOLUME_MULTIPLIER = 1.08f;
 
     private static final float MIN_RMS = 0.018f;
-    private static final float MIN_VOICING_CORRELATION = 0.46f;
+    private static final float YIN_THRESHOLD = 0.18f;
     private static final int MIN_PITCH_HZ = 75;
     private static final int MAX_PITCH_HZ = 420;
 
@@ -41,6 +41,11 @@ public final class SourceExpressionMath {
     /**
      * Analyze an Android Visualizer waveform. Visualizer samples are unsigned 8-bit PCM centered at
      * 128 and samplingRateMilliHz is reported in milli-Hz by Android.
+     *
+     * A compact YIN-style cumulative mean normalized difference estimator is used instead of plain
+     * autocorrelation. Plain autocorrelation frequently prefers two periods over one (110 Hz for a
+     * clean 220 Hz tone); YIN deliberately chooses the first strong periodic minimum and is much
+     * safer for the gentle relative pitch tracking needed here.
      */
     public static Frame analyze(byte[] waveform, int samplingRateMilliHz) {
         if (waveform == null || waveform.length < 128) return new Frame(0f, 0f, 0f);
@@ -53,9 +58,11 @@ public final class SourceExpressionMath {
         for (byte b : waveform) mean += (b & 0xff) - 128.0;
         mean /= n;
 
+        final double[] samples = new double[n];
         double energy = 0.0;
-        for (byte b : waveform) {
-            double x = ((b & 0xff) - 128.0 - mean) / 128.0;
+        for (int i = 0; i < n; i++) {
+            double x = ((waveform[i] & 0xff) - 128.0 - mean) / 128.0;
+            samples[i] = x;
             energy += x * x;
         }
         float rms = (float) Math.sqrt(energy / n);
@@ -65,38 +72,55 @@ public final class SourceExpressionMath {
         int maxLag = Math.min(n / 2, sampleRate / MIN_PITCH_HZ);
         if (maxLag <= minLag) return new Frame(rms, 0f, 0f);
 
-        int bestLag = -1;
-        double bestCorr = -1.0;
+        final double[] difference = new double[maxLag + 1];
+        final double[] cmnd = new double[maxLag + 1];
+        cmnd[0] = 1.0;
 
-        // Step by two samples. That halves callback cost while retaining much finer resolution than
-        // the very small pitch modulation we ultimately allow through to TTS.
-        for (int lag = minLag; lag <= maxLag; lag++) {
-            double cross = 0.0;
-            double left = 0.0;
-            double right = 0.0;
+        // Step by two samples to keep Visualizer callbacks inexpensive on phones.
+        for (int lag = 1; lag <= maxLag; lag++) {
+            double sum = 0.0;
             for (int i = 0; i + lag < n; i += 2) {
-                double a = ((waveform[i] & 0xff) - 128.0 - mean) / 128.0;
-                double b = ((waveform[i + lag] & 0xff) - 128.0 - mean) / 128.0;
-                cross += a * b;
-                left += a * a;
-                right += b * b;
+                double delta = samples[i] - samples[i + lag];
+                sum += delta * delta;
             }
-            if (left <= 1e-9 || right <= 1e-9) continue;
-            double corr = cross / Math.sqrt(left * right);
-            if (corr > bestCorr) {
-                bestCorr = corr;
-                bestLag = lag;
+            difference[lag] = sum;
+        }
+
+        double running = 0.0;
+        for (int lag = 1; lag <= maxLag; lag++) {
+            running += difference[lag];
+            cmnd[lag] = running > 1e-12 ? difference[lag] * lag / running : 1.0;
+        }
+
+        int chosenLag = -1;
+        for (int lag = minLag; lag <= maxLag; lag++) {
+            if (cmnd[lag] < YIN_THRESHOLD) {
+                // Descend to the local minimum, then stop. The first good minimum is the period,
+                // whereas later minima are commonly integer multiples of that period.
+                while (lag + 1 <= maxLag && cmnd[lag + 1] < cmnd[lag]) lag++;
+                chosenLag = lag;
+                break;
             }
         }
 
-        if (bestLag <= 0 || bestCorr < MIN_VOICING_CORRELATION) {
-            return new Frame(rms, 0f, 0f);
+        if (chosenLag < 0) {
+            // No threshold crossing: take the global minimum only when it is still reasonably
+            // periodic. Otherwise fail neutral rather than inventing expression from noise/music.
+            double best = Double.POSITIVE_INFINITY;
+            int bestLag = -1;
+            for (int lag = minLag; lag <= maxLag; lag++) {
+                if (cmnd[lag] < best) {
+                    best = cmnd[lag];
+                    bestLag = lag;
+                }
+            }
+            if (bestLag < 0 || best > 0.32) return new Frame(rms, 0f, 0f);
+            chosenLag = bestLag;
         }
 
-        float pitch = sampleRate / (float) bestLag;
+        float pitch = sampleRate / (float) chosenLag;
         if (pitch < MIN_PITCH_HZ || pitch > MAX_PITCH_HZ) return new Frame(rms, 0f, 0f);
-        float confidence = clamp((float) ((bestCorr - MIN_VOICING_CORRELATION)
-                / (1.0 - MIN_VOICING_CORRELATION)), 0f, 1f);
+        float confidence = clamp((float) (1.0 - cmnd[chosenLag] / 0.35), 0f, 1f);
         return new Frame(rms, pitch, confidence);
     }
 
