@@ -13,6 +13,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,10 +26,11 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Direct Gemini transcript translator for the Spanish-study overlay.
  *
- * v2.2.5 keeps complete source-transcript context while translating short semantic events 1:1.
- * The prompt optimizes for isochronous dubbing plus professional one-line bilingual subtitles.
- * Playback can still start progressively; a slow/failed Gemini request falls back to Morphe's
- * Google translator for that block.
+ * v2.2.6 treats subtitle alignment as data integrity, not just a prompt instruction. Gemini must
+ * return every translation keyed to an immutable source event ID and echo the exact English source
+ * text for that ID. Results are reassembled by ID rather than response position, then defensively
+ * checked for obvious neighboring-event leakage before they can reach the subtitle/TTS timeline.
+ * A rejected/slow request falls back to Morphe's line-preserving Google translator for that batch.
  */
 public final class GeminiTranslator {
     private static final int CONNECT_TIMEOUT_MS = 7_000;
@@ -36,7 +38,7 @@ public final class GeminiTranslator {
     private static final String API_ROOT =
             "https://generativelanguage.googleapis.com/v1beta/models/";
 
-    private static final int OUTPUT_SEGMENTS_PER_REQUEST = 120;
+    private static final int OUTPUT_SEGMENTS_PER_REQUEST = 40;
     private static final int MAX_PREPARED_TRANSCRIPTS = 3;
     private static final Map<String, PreparedTranscript> PREPARED =
             new LinkedHashMap<String, PreparedTranscript>(4, 0.75f, true) {
@@ -83,7 +85,7 @@ public final class GeminiTranslator {
             try {
                 block = translateRange(prepared.fullContext, prepared.segments, start, end, targetLang);
             } catch (Exception ex) {
-                Logger.printDebug(() -> "Gemini full-transcript block failed; using Google fallback", ex);
+                Logger.printDebug(() -> "Gemini full-transcript block failed alignment/latency check; using Google fallback", ex);
                 block = translateFallback(prepared.segments.subList(start, end), targetLang);
             }
             if (block.size() != end - start) {
@@ -108,8 +110,8 @@ public final class GeminiTranslator {
 
     /**
      * Translate one progressive dispatcher batch. Gemini still receives the complete source
-     * transcript as context; only the requested source IDs are emitted. If Gemini cannot answer
-     * within the latency budget, this batch falls back to the built-in Google translator.
+     * transcript as context, but each response item carries its immutable source ID and exact source
+     * echo. This makes response ordering irrelevant and lets us reject a shifted/misaligned batch.
      */
     public static List<String> translateBatch(String videoId,
                                               List<TranscriptSegment> segments,
@@ -132,7 +134,7 @@ public final class GeminiTranslator {
             return translateRange(prepared.fullContext, prepared.segments,
                     start, start + segments.size(), targetLang);
         } catch (Exception ex) {
-            Logger.printDebug(() -> "Gemini batch timed out/failed; using Google fallback", ex);
+            Logger.printDebug(() -> "Gemini batch timed out/failed alignment validation; using Google fallback", ex);
             return translateFallback(segments, targetLang);
         }
     }
@@ -227,13 +229,51 @@ public final class GeminiTranslator {
             throw new Exception("Gemini range count mismatch: expected " + expected
                     + ", got " + arr.length());
         }
-        List<String> result = new ArrayList<>(arr.length());
+
+        // Do NOT trust array position. Reassemble by immutable source ID and validate the exact
+        // source echo before accepting any translation into the bilingual timeline.
+        Map<Integer, String> translationsById = new HashMap<>();
         for (int i = 0; i < arr.length(); i++) {
-            String text = arr.optString(i, "").trim();
-            if (text.isEmpty()) text = segments.get(start + i).text;
-            result.add(text);
+            JSONObject item = arr.optJSONObject(i);
+            if (item == null) throw new Exception("Gemini item " + i + " is not an object");
+
+            int id = item.optInt("id", Integer.MIN_VALUE);
+            if (id < start || id >= end) {
+                throw new Exception("Gemini returned out-of-range subtitle ID: " + id);
+            }
+            if (translationsById.containsKey(id)) {
+                throw new Exception("Gemini returned duplicate subtitle ID: " + id);
+            }
+
+            String sourceEcho = item.optString("source", "");
+            String translation = item.optString("translation", "").trim();
+            TranslationAlignmentGuard.validate(
+                    segments.get(id).text,
+                    sourceEcho,
+                    translation,
+                    neighboringSourceTexts(segments, id));
+            translationsById.put(id, translation);
+        }
+
+        List<String> result = new ArrayList<>(expected);
+        for (int id = start; id < end; id++) {
+            String translation = translationsById.get(id);
+            if (translation == null || translation.isBlank()) {
+                throw new Exception("Gemini omitted subtitle ID: " + id);
+            }
+            result.add(translation);
         }
         return result;
+    }
+
+    private static List<String> neighboringSourceTexts(List<TranscriptSegment> segments, int id) {
+        List<String> neighbors = new ArrayList<>(4);
+        int from = Math.max(0, id - 2);
+        int to = Math.min(segments.size() - 1, id + 2);
+        for (int i = from; i <= to; i++) {
+            if (i != id) neighbors.add(segments.get(i).text);
+        }
+        return neighbors;
     }
 
     private static String buildFullContext(List<TranscriptSegment> segments) {
@@ -253,7 +293,7 @@ public final class GeminiTranslator {
                                            int end,
                                            String targetLang) throws Exception {
         boolean spanish = targetLang != null && targetLang.toLowerCase().startsWith("es");
-        StringBuilder prompt = new StringBuilder(fullContext.length() + 4096);
+        StringBuilder prompt = new StringBuilder(fullContext.length() + 4600);
         prompt.append("You are translating a complete timed YouTube transcript for an isochronous dubbed audio track and bilingual study subtitles. ");
         if (spanish) {
             prompt.append("Translate into natural conversational neutral Latin American Spanish. ");
@@ -261,28 +301,36 @@ public final class GeminiTranslator {
             prompt.append("Translate naturally for spoken dubbing into language code ")
                     .append(targetLang).append(". ");
         }
-        prompt.append("Use the COMPLETE transcript below to resolve names, jokes, pronouns, terminology, speaker intent, and recurring phrases. ")
-                .append("Each ID is already one short semantic sentence or clause and is paired with the source-language subtitle for exactly that timestamp slot. ")
-                .append("CRITICAL ALIGNMENT RULE: translate only the meaning contained in that ID. Do not move, borrow, postpone, anticipate, merge, or redistribute meaning across neighboring IDs. ")
-                .append("The translated string must be a complete semantic counterpart to the English source string for that same ID so a learner can pause on one frame and compare them directly. ")
-                .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers, and wordy literal constructions. Use concise idiomatic equivalents so the spoken translation can finish inside the source timestamp instead of spilling into the next clause. ")
-                .append("BILINGUAL SUBTITLE RULE: Spanish is the target-language top line and English is the matching source line below it. The translated string must fit one line whenever meaning can be preserved. Aim for roughly 25-38 characters including spaces and punctuation; treat 42 characters as the normal one-line ceiling. If an exact natural equivalent would exceed that, compress wording idiomatically before exceeding the ceiling. Never omit required meaning merely to satisfy the character target. ")
-                .append("Do not summarize or omit meaning. Preserve tone, profanity strength, names, gamer tags, numbers, and domain-specific terminology. ")
-                .append("Return exactly one translated string for each requested ID, in ascending ID order.\n\n")
+        prompt.append("Use the COMPLETE transcript below only as context for names, jokes, pronouns, terminology, speaker intent, and recurring phrases. ")
+                .append("Each ID is one immutable semantic subtitle event. Never move meaning between IDs. ")
+                .append("CRITICAL PAIRING RULE: for every requested ID, copy that ID's English source text VERBATIM into the source field and put ONLY the translation of that exact source field into translation. Do not translate a neighboring line, do not shift array entries, and do not use a weapon/name/number from another ID unless it is actually present in this ID's source meaning. ")
+                .append("The translation must be a complete semantic counterpart so a learner can pause on one frame and compare the two lines directly. ")
+                .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers, and wordy literal constructions so speech can finish inside the source timestamp. ")
+                .append("BILINGUAL SUBTITLE RULE: Spanish is the target-language top line and English is the matching source line below it. Aim for roughly 25-38 characters and treat 42 characters as the normal one-line ceiling when natural wording permits. Never omit required meaning merely to satisfy the character target. ")
+                .append("Return exactly one object for every requested ID. Object fields are id, source, and translation. Response order does not matter because IDs are authoritative.\n\n")
                 .append(fullContext)
                 .append("\nOUTPUT ONLY IDS ").append(start).append(" THROUGH ").append(end - 1).append(".\n");
 
+        JSONObject itemProperties = new JSONObject()
+                .put("id", new JSONObject().put("type", "integer")
+                        .put("minimum", start).put("maximum", end - 1))
+                .put("source", new JSONObject().put("type", "string"))
+                .put("translation", new JSONObject().put("type", "string"));
+        JSONObject itemSchema = new JSONObject()
+                .put("type", "object")
+                .put("required", new JSONArray().put("id").put("source").put("translation"))
+                .put("properties", itemProperties);
         JSONObject arraySchema = new JSONObject()
                 .put("type", "array")
                 .put("minItems", end - start)
                 .put("maxItems", end - start)
-                .put("items", new JSONObject().put("type", "string"));
+                .put("items", itemSchema);
 
         JSONObject generationConfig = new JSONObject()
                 .put("responseMimeType", "application/json")
                 .put("responseJsonSchema", arraySchema)
-                .put("temperature", 0.1)
-                .put("maxOutputTokens", Math.max(512, (end - start) * 70));
+                .put("temperature", 0.0)
+                .put("maxOutputTokens", Math.max(768, (end - start) * 120));
 
         JSONObject part = new JSONObject().put("text", prompt.toString());
         JSONObject content = new JSONObject().put("parts", new JSONArray().put(part));
