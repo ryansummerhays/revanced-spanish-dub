@@ -137,9 +137,8 @@ final class SpanishSubtitleOverlay {
             if(timing!=null&&timing.size()>0){
                 long relative=Math.max(0,timeMs-segment.startMs);
                 long sourceSpan=Math.max(1,segment.endMs-segment.startMs);
-                long timingEnd=timing.startMs[timing.size()-1]
-                        +Math.max(1,timing.durationMs[timing.size()-1]);
-                long mappedRelative=Math.round((relative/(double)sourceSpan)*Math.max(1,timingEnd));
+                long timingEnd=Math.max(1,timing.startMs[timing.size()-1]);
+                long mappedRelative=Math.round((relative/(double)sourceSpan)*timingEnd);
                 int boundaryIndex=0;
                 for(int i=0;i<timing.size();i++){
                     if(timing.startMs[i]<=mappedRelative)boundaryIndex=i;
