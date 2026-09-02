@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.2.2 patch bundle
+name: Build Spanish Dub Study v2.2.3 patch bundle
 
 on:
   workflow_dispatch:
@@ -38,15 +38,15 @@ jobs:
           javac -d /tmp/spanish-study-test \
             overlay/src/app/spanishstudy/vot/VocabularyEntry.java \
             overlay/src/app/spanishstudy/vot/VocabularyAnalyzer.java \
-            overlay/src/app/spanishstudy/vot/SynchronizedSubtitleChunks.java \
+            overlay/src/app/spanishstudy/vot/SemanticClauseSplitter.java \
             tests/VocabularyAnalyzerTest.java \
-            tests/WholeTranscriptDesignTest.java \
-            tests/SynchronizedSubtitleChunksTest.java
+            tests/SemanticClauseSplitterTest.java \
+            tests/WholeTranscriptDesignTest.java
           java -cp /tmp/spanish-study-test VocabularyAnalyzerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SemanticClauseSplitterTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
-          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SynchronizedSubtitleChunksTest
 
-      - name: Apply Spanish study v2.2.2 overlay
+      - name: Apply Spanish study v2.2.3 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -54,6 +54,7 @@ jobs:
           python3 scripts/patch_autodub_timeline.py upstream
           python3 scripts/patch_quickstart_gemini.py upstream
           python3 scripts/patch_autostart_session.py upstream
+          python3 scripts/patch_live_speech_rate.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -63,7 +64,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.2.2 bundle
+      - name: Rebrand and package v2.2.3 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -72,8 +73,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.2.2.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.2\nDescription: Quick-start Gemini dubbing with whole-transcript context, per-batch timeout/fallback, automatic per-video session loading, persistent study settings, immutable seek-safe timing, synchronized bilingual subtitles, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.2\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.2.3.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.3\nDescription: Quick-start full-context Gemini dubbing with paired semantic English/Spanish clauses, immutable source timing, clean live speech-rate resync, portrait-responsive subtitle placement, per-video autostart, persistent study settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.3\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -88,7 +89,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.2.2
+          name: spanish-dub-study-patches-v2.2.3
           path: dist/
           if-no-files-found: error
           retention-days: 30
