@@ -34,6 +34,11 @@ final class TranscriptCorrectionStore {
         return corrected == null || corrected.isBlank() ? rawFallback : corrected;
     }
 
+    /** Roll back a proposed correction when its paired translation later fails grounding checks. */
+    static synchronized void remove(long startMs, long endMs) {
+        CORRECTIONS.remove(key(startMs, endMs));
+    }
+
     static synchronized void clear() {
         CORRECTIONS.clear();
     }
