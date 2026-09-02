@@ -34,6 +34,41 @@ public final class SpanishStudyController {
         SpanishSubtitleOverlay.setSegments(latest);
     }
 
+    /** Freeze the first accepted target-language text for every immutable source slot. */
+    public static List<TranscriptSegment> mergeTranslationUpdate(List<TranscriptSegment> previous,
+                                                                 List<TranscriptSegment> incoming,
+                                                                 String targetLang){
+        return DubEventStateStore.mergeTranslationUpdate(previous,incoming,targetLang);
+    }
+
+    public static void onDubAudioReady(TranscriptSegment segment,int index,long durationMs){
+        DubEventStateStore.markReady(segment,index,durationMs);
+    }
+
+    public static void onDubPlaybackStarted(TranscriptSegment segment,int index,long durationMs,float rate){
+        DubEventStateStore.markPlaying(segment,index,durationMs,rate);
+    }
+
+    public static void onDubPlaybackDone(TranscriptSegment segment,int index){
+        DubEventStateStore.markDone(segment,index);
+    }
+
+    public static int onDubPlaybackFailed(TranscriptSegment segment,int index){
+        return DubEventStateStore.markFailure(segment,index);
+    }
+
+    public static int dubFailureCount(TranscriptSegment segment){
+        return DubEventStateStore.failureCount(segment);
+    }
+
+    public static void onDubPlaybackSkipped(TranscriptSegment segment,int index){
+        DubEventStateStore.markSkipped(segment,index);
+    }
+
+    public static String dubDiagnostic(TranscriptSegment segment){
+        return DubEventStateStore.diagnostic(segment);
+    }
+
     public static void onSourceTranscriptFetched(List<TranscriptSegment> segments){
         final List<TranscriptSegment> snapshot=segments==null?new ArrayList<>():new ArrayList<>(segments);
         if(Looper.myLooper()==Looper.getMainLooper())SpanishSubtitleOverlay.setSourceSegments(snapshot);
@@ -53,6 +88,8 @@ public final class SpanishStudyController {
         SpanishSubtitleOverlay.hide();
         SpanishWordTimingStore.clear();
         TranscriptCorrectionStore.clear();
+        DubEventStateStore.clear();
+        SourceCaptionTimingStore.beginTranscript();
         SourceExpressionMonitor.resetDynamics();
     }
 
