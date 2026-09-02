@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.2.6 patch bundle
+name: Build Spanish Dub Study v2.2.7 patch bundle
 
 on:
   workflow_dispatch:
@@ -49,16 +49,16 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.2.6 overlay
+      - name: Apply Spanish study v2.2.7 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
+          python3 scripts/patch_natural_speech_boundaries.py upstream
           python3 scripts/patch_bilingual_subtitles.py upstream
           python3 scripts/patch_autodub_timeline.py upstream
           python3 scripts/patch_quickstart_gemini.py upstream
           python3 scripts/patch_autostart_session.py upstream
           python3 scripts/patch_live_speech_rate.py upstream
-          python3 scripts/patch_hard_sync_deadline.py upstream
           python3 scripts/patch_translation_language_guard.py upstream
 
       - name: Build Morphe patch bundle
@@ -69,7 +69,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.2.6 bundle
+      - name: Rebrand and package v2.2.7 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -78,8 +78,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.2.6.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.6\nDescription: Standards-based bilingual subtitles with alignment-integrity enforcement: Gemini translations are keyed to immutable source event IDs, must echo the exact English source line, are reassembled by ID instead of array position, reject obvious neighboring-event token leakage, use smaller progressive batches, and reject clearly English/untranslated text before it can be tagged or spoken as Spanish; includes one-line Spanish-over-English semantic pairs, hard source-timeline dub sync, portrait-responsive placement, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.6\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.2.7.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.7\nDescription: Natural-phrase real-time dubbing and paired bilingual subtitles. Speech blocks now prefer actual punctuation and caption-timing pauses, arbitrary width-based mid-thought cuts are removed, and active TTS is allowed to finish its natural phrase instead of being chopped at every subtitle boundary. Gemini translations remain keyed to immutable source IDs with exact source echoes and alignment checks; clearly English/untranslated text is rejected before Spanish subtitle/TTS playback. Includes one-line Spanish-over-English paired subtitles, source-timeline catch-up after completed phrases, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.7\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -94,7 +94,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.2.6
+          name: spanish-dub-study-patches-v2.2.7
           path: dist/
           if-no-files-found: error
           retention-days: 30
