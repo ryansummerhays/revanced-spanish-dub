@@ -3,7 +3,9 @@ package app.spanishstudy.vot;
 import android.app.*;
 import android.os.*;
 import android.text.InputType;
+import android.view.View;
 import android.widget.*;
+import java.lang.ref.WeakReference;
 import java.util.*;
 import app.morphe.extension.shared.Utils;
 import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegment;
@@ -13,8 +15,19 @@ public final class SpanishStudyController {
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static List<TranscriptSegment> latest=new ArrayList<>();
     private static int reviewGeneration;
+    private static WeakReference<View> playerControlsRef=new WeakReference<>(null);
 
     private SpanishStudyController(){}
+
+    /** Captures YouTube's actual player-controls bounds for responsive subtitle positioning. */
+    public static void onPlayerControlsView(View view){
+        playerControlsRef=new WeakReference<>(view);
+    }
+
+    static View playerControlsView(){
+        View view=playerControlsRef.get();
+        return view!=null&&view.isAttachedToWindow()?view:null;
+    }
 
     public static void onTranscriptUpdated(List<TranscriptSegment> segments){
         latest=segments==null?new ArrayList<>():new ArrayList<>(segments);
