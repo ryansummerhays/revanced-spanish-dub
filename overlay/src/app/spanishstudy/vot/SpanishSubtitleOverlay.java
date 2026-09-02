@@ -26,15 +26,12 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
  * English source is immediately below it. Both languages use the exact same immutable source event
  * and switch at the same instant.
  *
- * Short events remain one line. Longer natural clauses are allowed to wrap to a small number of
- * centered lines rather than being silently clipped at the player edge. Preserving every word in a
- * pause-able bilingual event is more important than enforcing a one-line cosmetic target.
+ * Normal events target one line. If a genuinely natural phrase still cannot fit after modest text
+ * shrinking, it may use one emergency second line rather than silently clipping the right-hand tail.
+ * The segmenter is responsible for making two-line cases rare.
  *
  * The English display may use a conservative Gemini context correction for obvious ASR/proper-noun
  * errors. That changes only displayed text; immutable source timing/IDs remain authoritative.
- *
- * The pair has one shared vertical anchor, which prevents the two languages from drifting apart
- * spatially and lets portrait mode map the whole pair proportionally into YouTube's smaller player.
  */
 final class SpanishSubtitleOverlay {
     private static Activity activity;
@@ -178,7 +175,7 @@ final class SpanishSubtitleOverlay {
         view.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         view.setGravity(Gravity.CENTER);
         view.setSingleLine(false);
-        view.setMaxLines(3);
+        view.setMaxLines(2);
         view.setHorizontallyScrolling(false);
         view.setEllipsize(null);
         view.setPadding(dp(a, 8), dp(a, 3), dp(a, 8), dp(a, 3));
@@ -225,7 +222,7 @@ final class SpanishSubtitleOverlay {
 
     private static void updateTextSize(TextView view, int preferredSp) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            int minSp = Math.max(8, preferredSp - 3);
+            int minSp = Math.max(7, preferredSp - 4);
             view.setAutoSizeTextTypeUniformWithConfiguration(
                     minSp, Math.max(minSp, preferredSp), 1, TypedValue.COMPLEX_UNIT_SP);
         } else {
