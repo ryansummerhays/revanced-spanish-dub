@@ -25,7 +25,7 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Direct Gemini transcript translator for the Spanish-study overlay.
  *
- * v2.2.3 keeps the complete source transcript available as context while translating compact
+ * v2.2.4 keeps the complete source transcript available as context while translating compact
  * source-language semantic clauses 1:1. Playback can still start progressively; a slow/failed
  * Gemini request falls back to Morphe's Google translator for that block.
  */
@@ -253,7 +253,7 @@ public final class GeminiTranslator {
                                            String targetLang) throws Exception {
         boolean spanish = targetLang != null && targetLang.toLowerCase().startsWith("es");
         StringBuilder prompt = new StringBuilder(fullContext.length() + 4096);
-        prompt.append("You are translating a complete timed YouTube transcript for a dubbed audio track and bilingual study subtitles. ");
+        prompt.append("You are translating a complete timed YouTube transcript for an isochronous dubbed audio track and bilingual study subtitles. ");
         if (spanish) {
             prompt.append("Translate into natural conversational neutral Latin American Spanish. ");
         } else {
@@ -261,11 +261,12 @@ public final class GeminiTranslator {
                     .append(targetLang).append(". ");
         }
         prompt.append("Use the COMPLETE transcript below to resolve names, jokes, pronouns, terminology, speaker intent, and recurring phrases. ")
-                .append("Each ID is already a compact semantic sentence or clause and is paired with the source-language subtitle for exactly that time slot. ")
-                .append("CRITICAL ALIGNMENT RULE: translate only the meaning contained in that ID. Do not move, borrow, postpone, anticipate, merge, or redistribute meaning across neighboring IDs, even when a different word order would sound slightly smoother. ")
-                .append("The Spanish string for an ID must be a complete semantic counterpart to the English source string for that same ID so a learner can pause on one frame and compare them directly. ")
-                .append("Do not summarize or omit. Keep each requested output concise enough to fit approximately the same source time window. ")
-                .append("Preserve tone, profanity strength, names, gamer tags, numbers, and domain-specific terminology. ")
+                .append("Each ID is already a short semantic sentence or clause and is paired with the source-language subtitle for exactly that timestamp slot. ")
+                .append("CRITICAL ALIGNMENT RULE: translate only the meaning contained in that ID. Do not move, borrow, postpone, anticipate, merge, or redistribute meaning across neighboring IDs. ")
+                .append("The translated string must be a complete semantic counterpart to the English source string for that same ID so a learner can pause on one frame and compare them directly. ")
+                .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers, and wordy literal constructions. Use concise idiomatic equivalents so the spoken translation can finish inside the source timestamp instead of spilling into the next clause. ")
+                .append("SUBTITLE RULE: keep the translated clause compact enough to fit on one subtitle line whenever natural phrasing permits. ")
+                .append("Do not summarize or omit meaning. Preserve tone, profanity strength, names, gamer tags, numbers, and domain-specific terminology. ")
                 .append("Return exactly one translated string for each requested ID, in ascending ID order.\n\n")
                 .append(fullContext)
                 .append("\nOUTPUT ONLY IDS ").append(start).append(" THROUGH ").append(end - 1).append(".\n");
@@ -279,8 +280,8 @@ public final class GeminiTranslator {
         JSONObject generationConfig = new JSONObject()
                 .put("responseMimeType", "application/json")
                 .put("responseJsonSchema", arraySchema)
-                .put("temperature", 0.15)
-                .put("maxOutputTokens", Math.max(512, (end - start) * 80));
+                .put("temperature", 0.1)
+                .put("maxOutputTokens", Math.max(512, (end - start) * 70));
 
         JSONObject part = new JSONObject().put("text", prompt.toString());
         JSONObject content = new JSONObject().put("parts", new JSONArray().put(part));
