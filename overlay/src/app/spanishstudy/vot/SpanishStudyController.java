@@ -52,6 +52,7 @@ public final class SpanishStudyController {
         SpanishSubtitleOverlay.setSourceSegments(new ArrayList<>());
         SpanishSubtitleOverlay.hide();
         SpanishWordTimingStore.clear();
+        TranscriptCorrectionStore.clear();
         SourceExpressionMonitor.resetDynamics();
     }
 
