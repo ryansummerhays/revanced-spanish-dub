@@ -7,7 +7,7 @@ public final class SemanticClauseSplitterTest {
         shortSentenceStaysWhole();
         longSentencePrefersPunctuationPause();
         unpunctuatedThoughtDoesNotGetArbitrarilyChopped();
-        strongConjunctionCanSplitVeryLongThought();
+        conjunctionAloneDoesNotCreateTtsStop();
         reconstructionPreservesWords();
         weakRelativeClauseIsNotPreferredBoundary();
         System.out.println("semantic clause splitter: OK");
@@ -37,12 +37,11 @@ public final class SemanticClauseSplitterTest {
                 "unpunctuated thought should remain whole when no natural pause exists");
     }
 
-    private static void strongConjunctionCanSplitVeryLongThought() {
+    private static void conjunctionAloneDoesNotCreateTtsStop() {
         String s = "I kept trying the same setup for much longer than I expected because the first few results looked inconsistent enough that I wanted another clean comparison before changing anything";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 2, "strong conjunction should provide a natural fallback boundary");
-        require(parts.get(1).toLowerCase().startsWith("because "),
-                "following phrase should begin with its conjunction");
+        require(parts.size() == 1,
+                "conjunction alone should not invent a speech pause or TTS clip boundary");
     }
 
     private static void reconstructionPreservesWords() {
@@ -55,12 +54,7 @@ public final class SemanticClauseSplitterTest {
     private static void weakRelativeClauseIsNotPreferredBoundary() {
         String s = "This is the controller that I bought after watching the review which explained the buttons that matter most during normal play";
         List<String> parts = SemanticClauseSplitter.split(s);
-        // "that/which/who" used to be treated as generic split points and produced unnatural TTS.
-        for (int i = 1; i < parts.size(); i++) {
-            String p = parts.get(i).toLowerCase();
-            require(!p.startsWith("that ") && !p.startsWith("which ") && !p.startsWith("who "),
-                    "weak relative clause should not be chosen as a speech pause");
-        }
+        require(parts.size() == 1, "relative clauses without punctuation should remain in one phrase");
     }
 
     private static void require(boolean condition, String message) {
