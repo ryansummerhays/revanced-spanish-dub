@@ -26,11 +26,11 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Direct Gemini transcript translator for the Spanish-study overlay.
  *
- * v2.2.6 treats subtitle alignment as data integrity, not just a prompt instruction. Gemini must
- * return every translation keyed to an immutable source event ID and echo the exact English source
- * text for that ID. Results are reassembled by ID rather than response position, then defensively
- * checked for obvious neighboring-event leakage before they can reach the subtitle/TTS timeline.
- * A rejected/slow request falls back to Morphe's line-preserving Google translator for that batch.
+ * Alignment is data integrity: Gemini must return every translation keyed to an immutable source
+ * event ID and echo the raw caption text exactly. v2.3.2 additionally supplies YouTube title,
+ * creator and description context and asks Gemini to infer domain terminology/jargon from the whole
+ * transcript before translating. A separate correctedSource field may clean a high-confidence ASR
+ * error for English subtitle display, while raw source text/timestamps remain the immutable clock.
  */
 public final class GeminiTranslator {
     private static final int CONNECT_TIMEOUT_MS = 7_000;
@@ -40,11 +40,22 @@ public final class GeminiTranslator {
 
     private static final int OUTPUT_SEGMENTS_PER_REQUEST = 40;
     private static final int MAX_PREPARED_TRANSCRIPTS = 3;
+    private static final int MAX_VIDEO_METADATA = 4;
+    private static final int MAX_DESCRIPTION_CHARS = 2_400;
+
     private static final Map<String, PreparedTranscript> PREPARED =
             new LinkedHashMap<String, PreparedTranscript>(4, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<String, PreparedTranscript> eldest) {
                     return size() > MAX_PREPARED_TRANSCRIPTS;
+                }
+            };
+
+    private static final Map<String, VideoMetadata> VIDEO_METADATA =
+            new LinkedHashMap<String, VideoMetadata>(5, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, VideoMetadata> eldest) {
+                    return size() > MAX_VIDEO_METADATA;
                 }
             };
 
@@ -57,6 +68,22 @@ public final class GeminiTranslator {
                 && !SpanishStudyPrefs.geminiApiKey(context).trim().isEmpty();
     }
 
+    /**
+     * Called from TranscriptFetcher using the same Innertube player response that supplied captions.
+     * No extra YouTube request is needed. Description is deliberately capped before it reaches the
+     * repeated progressive translation prompts.
+     */
+    public static synchronized void prepareVideoMetadata(String videoId,
+                                                         String title,
+                                                         String author,
+                                                         String description) {
+        if (videoId == null || videoId.isBlank()) return;
+        VIDEO_METADATA.put(videoId, new VideoMetadata(
+                cleanMetadata(title, 500),
+                cleanMetadata(author, 250),
+                cleanMetadata(description, MAX_DESCRIPTION_CHARS)));
+    }
+
     /** Capture the complete immutable source transcript before Morphe splits it into batches. */
     public static synchronized void prepareTranscript(String videoId,
                                                       List<TranscriptSegment> segments,
@@ -64,7 +91,7 @@ public final class GeminiTranslator {
         if (videoId == null || segments == null || segments.isEmpty()) return;
         List<TranscriptSegment> snapshot = new ArrayList<>(segments);
         PREPARED.put(cacheKey(videoId, targetLang),
-                new PreparedTranscript(snapshot, buildFullContext(snapshot)));
+                new PreparedTranscript(snapshot, buildFullContext(videoId, snapshot)));
     }
 
     /** Full blocking helper retained for compatibility/non-playback uses. */
@@ -110,8 +137,8 @@ public final class GeminiTranslator {
 
     /**
      * Translate one progressive dispatcher batch. Gemini still receives the complete source
-     * transcript as context, but each response item carries its immutable source ID and exact source
-     * echo. This makes response ordering irrelevant and lets us reject a shifted/misaligned batch.
+     * transcript plus video metadata as context, but each response item carries its immutable source
+     * ID and exact raw source echo. Response ordering is therefore irrelevant.
      */
     public static List<String> translateBatch(String videoId,
                                               List<TranscriptSegment> segments,
@@ -128,7 +155,7 @@ public final class GeminiTranslator {
         int start = findBatchStart(prepared.segments, segments);
         try {
             if (start < 0) {
-                String localContext = buildFullContext(segments);
+                String localContext = buildFullContext(videoId, segments);
                 return translateRange(localContext, segments, 0, segments.size(), targetLang);
             }
             return translateRange(prepared.fullContext, prepared.segments,
@@ -230,8 +257,6 @@ public final class GeminiTranslator {
                     + ", got " + arr.length());
         }
 
-        // Do NOT trust array position. Reassemble by immutable source ID and validate the exact
-        // source echo before accepting any translation into the bilingual timeline.
         Map<Integer, String> translationsById = new HashMap<>();
         for (int i = 0; i < arr.length(); i++) {
             JSONObject item = arr.optJSONObject(i);
@@ -245,13 +270,19 @@ public final class GeminiTranslator {
                 throw new Exception("Gemini returned duplicate subtitle ID: " + id);
             }
 
+            TranscriptSegment canonicalSegment = segments.get(id);
             String sourceEcho = item.optString("source", "");
+            String correctedSource = item.optString("correctedSource", sourceEcho).trim();
             String translation = item.optString("translation", "").trim();
             TranslationAlignmentGuard.validate(
-                    segments.get(id).text,
+                    canonicalSegment.text,
                     sourceEcho,
                     translation,
                     neighboringSourceTexts(segments, id));
+
+            // Display correction is side data only. The store independently rejects broad rewrites.
+            TranscriptCorrectionStore.put(canonicalSegment.startMs, canonicalSegment.endMs,
+                    canonicalSegment.text, correctedSource);
             translationsById.put(id, translation);
         }
 
@@ -276,9 +307,21 @@ public final class GeminiTranslator {
         return neighbors;
     }
 
-    private static String buildFullContext(List<TranscriptSegment> segments) {
-        StringBuilder context = new StringBuilder(Math.max(4096, segments.size() * 48));
-        context.append("COMPLETE SOURCE TRANSCRIPT. IDs and timestamps are authoritative.\n");
+    private static String buildFullContext(String videoId, List<TranscriptSegment> segments) {
+        StringBuilder context = new StringBuilder(Math.max(4600, segments.size() * 48));
+        VideoMetadata metadata;
+        synchronized (GeminiTranslator.class) {
+            metadata = VIDEO_METADATA.get(videoId == null ? "" : videoId);
+        }
+        context.append("VIDEO / SUBJECT CONTEXT\n");
+        if (metadata == null) {
+            context.append("No reliable YouTube metadata was available. Infer subject/domain only from repeated transcript evidence.\n");
+        } else {
+            if (!metadata.title.isBlank()) context.append("Title: ").append(metadata.title).append('\n');
+            if (!metadata.author.isBlank()) context.append("Creator/channel: ").append(metadata.author).append('\n');
+            if (!metadata.description.isBlank()) context.append("Description: ").append(metadata.description).append('\n');
+        }
+        context.append("\nCOMPLETE RAW SOURCE TRANSCRIPT. IDs and timestamps are authoritative; wording may contain ASR errors.\n");
         for (int i = 0; i < segments.size(); i++) {
             TranscriptSegment s = segments.get(i);
             context.append('[').append(i).append(" @ ")
@@ -293,7 +336,7 @@ public final class GeminiTranslator {
                                            int end,
                                            String targetLang) throws Exception {
         boolean spanish = targetLang != null && targetLang.toLowerCase().startsWith("es");
-        StringBuilder prompt = new StringBuilder(fullContext.length() + 4600);
+        StringBuilder prompt = new StringBuilder(fullContext.length() + 6500);
         prompt.append("You are translating a complete timed YouTube transcript for an isochronous dubbed audio track and bilingual study subtitles. ");
         if (spanish) {
             prompt.append("Translate into natural conversational neutral Latin American Spanish. ");
@@ -301,13 +344,16 @@ public final class GeminiTranslator {
             prompt.append("Translate naturally for spoken dubbing into language code ")
                     .append(targetLang).append(". ");
         }
-        prompt.append("Use the COMPLETE transcript below only as context for names, jokes, pronouns, terminology, speaker intent, and recurring phrases. ")
+        prompt.append("First use the VIDEO / SUBJECT CONTEXT and the COMPLETE transcript to infer the video's domain, recurring entities, names, products, games, characters, technical vocabulary, slang, abbreviations, memes and jargon. ")
+                .append("Treat the raw transcript as ASR that can contain homophones, bad spacing, wrong capitalization, phonetic spellings, or niche terms that a generic recognizer misunderstood. Resolve a suspicious token from global context only when evidence is strong: metadata, repeated transcript usage, nearby meaning, and well-known domain terminology should agree. For example, in a clearly Apex Legends weapon discussion, a raw token like 'DVO' may actually mean 'Devo' or 'Devotion' if the surrounding evidence strongly supports that reading. Do NOT guess merely because a correction is possible. ")
                 .append("Each ID is one immutable semantic subtitle event. Never move meaning between IDs. ")
-                .append("CRITICAL PAIRING RULE: for every requested ID, copy that ID's English source text VERBATIM into the source field and put ONLY the translation of that exact source field into translation. Do not translate a neighboring line, do not shift array entries, and do not use a weapon/name/number from another ID unless it is actually present in this ID's source meaning. ")
-                .append("The translation must be a complete semantic counterpart so a learner can pause on one frame and compare the two lines directly. ")
-                .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers, and wordy literal constructions so speech can finish inside the source timestamp. ")
-                .append("BILINGUAL SUBTITLE RULE: Spanish is the target-language top line and English is the matching source line below it. Aim for roughly 25-38 characters and treat 42 characters as the normal one-line ceiling when natural wording permits. Never omit required meaning merely to satisfy the character target. ")
-                .append("Return exactly one object for every requested ID. Object fields are id, source, and translation. Response order does not matter because IDs are authoritative.\n\n")
+                .append("CRITICAL RAW-SOURCE RULE: copy the requested ID's raw English caption VERBATIM into source, even when you believe it contains an ASR error. This field is an integrity checksum. ")
+                .append("CORRECTION RULE: correctedSource is the English text a careful human caption editor would display. Leave it IDENTICAL to source unless there is high-confidence contextual evidence of an actual transcription/parsing error. Correct proper nouns, jargon, acronyms, homophones, spacing, capitalization or punctuation; do not paraphrase, polish style, censor slang, or rewrite ordinary speech. ")
+                .append("TRANSLATION RULE: translate the intended meaning represented by correctedSource, while still translating ONLY this ID. Do not borrow, anticipate, postpone, merge or redistribute meaning from neighboring IDs. ")
+                .append("The translation must be a complete semantic counterpart so a learner can pause on one event and compare the two languages directly. ")
+                .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers and wordy literal constructions so speech can finish inside the source timestamp. ")
+                .append("SUBTITLE RULE: prefer compact natural clauses, but never omit required meaning just to hit a width target. The renderer can wrap unusually long natural phrases. ")
+                .append("Return exactly one object for every requested ID. Object fields are id, source, correctedSource, and translation. Response order does not matter because IDs are authoritative.\n\n")
                 .append(fullContext)
                 .append("\nOUTPUT ONLY IDS ").append(start).append(" THROUGH ").append(end - 1).append(".\n");
 
@@ -315,10 +361,12 @@ public final class GeminiTranslator {
                 .put("id", new JSONObject().put("type", "integer")
                         .put("minimum", start).put("maximum", end - 1))
                 .put("source", new JSONObject().put("type", "string"))
+                .put("correctedSource", new JSONObject().put("type", "string"))
                 .put("translation", new JSONObject().put("type", "string"));
         JSONObject itemSchema = new JSONObject()
                 .put("type", "object")
-                .put("required", new JSONArray().put("id").put("source").put("translation"))
+                .put("required", new JSONArray().put("id").put("source")
+                        .put("correctedSource").put("translation"))
                 .put("properties", itemProperties);
         JSONObject arraySchema = new JSONObject()
                 .put("type", "array")
@@ -330,7 +378,7 @@ public final class GeminiTranslator {
                 .put("responseMimeType", "application/json")
                 .put("responseJsonSchema", arraySchema)
                 .put("temperature", 0.0)
-                .put("maxOutputTokens", Math.max(768, (end - start) * 120));
+                .put("maxOutputTokens", Math.max(900, (end - start) * 150));
 
         JSONObject part = new JSONObject().put("text", prompt.toString());
         JSONObject content = new JSONObject().put("parts", new JSONArray().put(part));
@@ -357,6 +405,25 @@ public final class GeminiTranslator {
             if (error != null) return error.optString("message", raw);
         } catch (Exception ignored) {}
         return raw.length() > 400 ? raw.substring(0, 400) : raw;
+    }
+
+    private static String cleanMetadata(String value, int maxChars) {
+        if (value == null) return "";
+        String clean = value.trim().replaceAll("\\s+", " ");
+        if (clean.length() <= maxChars) return clean;
+        return clean.substring(0, maxChars).trim();
+    }
+
+    private static final class VideoMetadata {
+        final String title;
+        final String author;
+        final String description;
+
+        VideoMetadata(String title, String author, String description) {
+            this.title = title;
+            this.author = author;
+            this.description = description;
+        }
     }
 
     private static final class PreparedTranscript {
