@@ -17,29 +17,27 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
+import app.morphe.extension.shared.translation.TextTranslator;
 import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegment;
 
 /**
  * Direct Gemini transcript translator for the Spanish-study overlay.
  *
- * v2.2.2 keeps the complete source transcript available as context for every Gemini request,
- * but no longer waits for the complete translated video before the first Spanish line can play.
- * Morphe's progressive dispatcher can publish the first small translated block immediately while
- * the remaining immutable timeline is translated in larger background blocks.
+ * v2.2.2 keeps the complete source transcript available as context for Gemini, but playback no
+ * longer waits for the complete translated video. Morphe's progressive dispatcher publishes a
+ * small first block immediately and translates the rest in the background. A stuck Gemini request
+ * is time-limited and falls back to Morphe's Google translator for that block so dubbing cannot
+ * remain permanently silent merely because Gemini is slow or temporarily unavailable.
  */
 public final class GeminiTranslator {
-    private static final int CONNECT_TIMEOUT_MS = 10_000;
-    private static final int READ_TIMEOUT_MS = 60_000;
+    private static final int CONNECT_TIMEOUT_MS = 7_000;
+    private static final int READ_TIMEOUT_MS = 15_000;
     private static final String API_ROOT =
             "https://generativelanguage.googleapis.com/v1beta/models/";
 
-    // Used only by translateWholeTranscript(), which remains available as a compatibility/helper
-    // path. Normal v2.2.2 playback uses translateBatch() through Morphe's progressive dispatcher.
     private static final int OUTPUT_SEGMENTS_PER_REQUEST = 120;
-
-    // Keep a few prepared source transcripts so an abandoned video's final request cannot be
-    // confused with a newly opened video. Each prepared transcript is immutable.
     private static final int MAX_PREPARED_TRANSCRIPTS = 3;
     private static final Map<String, PreparedTranscript> PREPARED =
             new LinkedHashMap<String, PreparedTranscript>(4, 0.75f, true) {
@@ -58,11 +56,7 @@ public final class GeminiTranslator {
                 && !SpanishStudyPrefs.geminiApiKey(context).trim().isEmpty();
     }
 
-    /**
-     * Captures the entire immutable source transcript before Morphe splits it into playback-sized
-     * translation batches. Every later batch can therefore use whole-video context even though the
-     * first batch is returned quickly.
-     */
+    /** Capture the complete immutable source transcript before Morphe splits it into batches. */
     public static synchronized void prepareTranscript(String videoId,
                                                       List<TranscriptSegment> segments,
                                                       String targetLang) {
@@ -72,16 +66,12 @@ public final class GeminiTranslator {
                 new PreparedTranscript(snapshot, buildFullContext(snapshot)));
     }
 
-    /**
-     * Full blocking translation retained for compatibility and non-playback uses. Segment ordering
-     * and source timestamps remain unchanged.
-     */
+    /** Full blocking helper retained for compatibility/non-playback uses. */
     public static List<TranscriptSegment> translateWholeTranscript(String videoId,
                                                                    List<TranscriptSegment> segments,
                                                                    String targetLang) throws Exception {
         if (segments == null || segments.isEmpty()) return new ArrayList<>();
         prepareTranscript(videoId, segments, targetLang);
-
         PreparedTranscript prepared = prepared(videoId, targetLang);
         if (prepared == null) throw new IllegalStateException("Gemini transcript context unavailable");
 
@@ -90,10 +80,15 @@ public final class GeminiTranslator {
 
         for (int start = 0; start < segments.size(); start += OUTPUT_SEGMENTS_PER_REQUEST) {
             int end = Math.min(segments.size(), start + OUTPUT_SEGMENTS_PER_REQUEST);
-            List<String> block = translateRange(prepared.fullContext, prepared.segments,
-                    start, end, targetLang);
+            List<String> block;
+            try {
+                block = translateRange(prepared.fullContext, prepared.segments, start, end, targetLang);
+            } catch (Exception ex) {
+                Logger.printDebug(() -> "Gemini full-transcript block failed; using Google fallback", ex);
+                block = translateFallback(prepared.segments.subList(start, end), targetLang);
+            }
             if (block.size() != end - start) {
-                throw new Exception("Gemini range count mismatch: expected " + (end - start)
+                throw new Exception("Translation range count mismatch: expected " + (end - start)
                         + ", got " + block.size());
             }
             for (int i = 0; i < block.size(); i++) translated.set(start + i, block.get(i));
@@ -113,8 +108,9 @@ public final class GeminiTranslator {
     }
 
     /**
-     * Translate one dispatcher batch while still supplying Gemini with the COMPLETE source
-     * transcript. The batch itself is mapped back to its canonical source IDs/timestamps.
+     * Translate one progressive dispatcher batch. Gemini still receives the complete source
+     * transcript as context; only the requested source IDs are emitted. If Gemini cannot answer
+     * within the latency budget, this batch falls back to the built-in Google translator.
      */
     public static List<String> translateBatch(String videoId,
                                               List<TranscriptSegment> segments,
@@ -123,21 +119,30 @@ public final class GeminiTranslator {
 
         PreparedTranscript prepared = prepared(videoId, targetLang);
         if (prepared == null) {
-            // Defensive fallback. Normal playback always calls prepareTranscript() before batching.
             prepareTranscript(videoId, segments, targetLang);
             prepared = prepared(videoId, targetLang);
         }
-        if (prepared == null) throw new IllegalStateException("Gemini transcript context unavailable");
+        if (prepared == null) return translateFallback(segments, targetLang);
 
         int start = findBatchStart(prepared.segments, segments);
-        if (start < 0) {
-            // Never silently attach a batch to the wrong IDs. If an unexpected provider reshapes
-            // the list, use the local batch as its own canonical context instead.
-            String localContext = buildFullContext(segments);
-            return translateRange(localContext, segments, 0, segments.size(), targetLang);
+        try {
+            if (start < 0) {
+                String localContext = buildFullContext(segments);
+                return translateRange(localContext, segments, 0, segments.size(), targetLang);
+            }
+            return translateRange(prepared.fullContext, prepared.segments,
+                    start, start + segments.size(), targetLang);
+        } catch (Exception ex) {
+            Logger.printDebug(() -> "Gemini batch timed out/failed; using Google fallback", ex);
+            return translateFallback(segments, targetLang);
         }
-        int end = start + segments.size();
-        return translateRange(prepared.fullContext, prepared.segments, start, end, targetLang);
+    }
+
+    private static List<String> translateFallback(List<TranscriptSegment> segments,
+                                                  String targetLang) throws Exception {
+        List<String> lines = new ArrayList<>(segments.size());
+        for (TranscriptSegment segment : segments) lines.add(segment.text);
+        return TextTranslator.translate(lines, targetLang);
     }
 
     private static synchronized PreparedTranscript prepared(String videoId, String targetLang) {
@@ -195,7 +200,7 @@ public final class GeminiTranslator {
         conn.setRequestProperty("x-goog-api-key", apiKey);
         conn.setDoOutput(true);
 
-        JSONObject request = buildRequest(fullContext, segments, start, end, targetLang);
+        JSONObject request = buildRequest(fullContext, start, end, targetLang);
         try (OutputStream out = conn.getOutputStream()) {
             out.write(request.toString().getBytes(StandardCharsets.UTF_8));
         }
@@ -245,7 +250,6 @@ public final class GeminiTranslator {
     }
 
     private static JSONObject buildRequest(String fullContext,
-                                           List<TranscriptSegment> segments,
                                            int start,
                                            int end,
                                            String targetLang) throws Exception {
