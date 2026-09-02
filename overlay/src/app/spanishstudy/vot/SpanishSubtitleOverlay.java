@@ -101,14 +101,15 @@ final class SpanishSubtitleOverlay {
         if(englishView!=null)englishView.setVisibility(View.GONE);
     }
 
+    /** Both languages are indexed by the immutable YouTube source timeline. */
     private static TranscriptSegment findSpanish(long timeMs){
         List<TranscriptSegment> local=spanishSegments;
         if(local.isEmpty())return null;
         if(spanishCursor>=local.size())spanishCursor=local.size()-1;
-        while(spanishCursor>0&&timeMs<local.get(spanishCursor).playbackStartMs)spanishCursor--;
-        while(spanishCursor+1<local.size()&&timeMs>=local.get(spanishCursor).playbackEndMs)spanishCursor++;
+        while(spanishCursor>0&&timeMs<local.get(spanishCursor).startMs)spanishCursor--;
+        while(spanishCursor+1<local.size()&&timeMs>=local.get(spanishCursor).endMs)spanishCursor++;
         TranscriptSegment s=local.get(spanishCursor);
-        return timeMs>=s.playbackStartMs&&timeMs<s.playbackEndMs?s:null;
+        return timeMs>=s.startMs&&timeMs<s.endMs?s:null;
     }
 
     private static TranscriptSegment findEnglish(long timeMs){
@@ -127,17 +128,21 @@ final class SpanishSubtitleOverlay {
         while(matcher.find())tokens.add(matcher.group());
         if(tokens.isEmpty())return "";
 
-        long start=spanish?segment.playbackStartMs:segment.startMs;
-        long end=spanish?segment.playbackEndMs:segment.endMs;
-        int tokenIndex=estimatedTokenIndex(start,end,timeMs,tokens.size());
+        // Subtitle selection always follows source video time. Edge word timings are used only
+        // within the active Spanish segment; they never move the segment itself.
+        int tokenIndex=estimatedTokenIndex(segment.startMs,segment.endMs,timeMs,tokens.size());
 
         if(spanish){
             SpanishWordTimingStore.Snapshot timing=SpanishWordTimingStore.get(segment.text);
             if(timing!=null&&timing.size()>0){
-                long relative=Math.max(0,timeMs-segment.playbackStartMs);
+                long relative=Math.max(0,timeMs-segment.startMs);
+                long sourceSpan=Math.max(1,segment.endMs-segment.startMs);
+                long timingEnd=timing.startMs[timing.size()-1]
+                        +Math.max(1,timing.durationMs[timing.size()-1]);
+                long mappedRelative=Math.round((relative/(double)sourceSpan)*Math.max(1,timingEnd));
                 int boundaryIndex=0;
                 for(int i=0;i<timing.size();i++){
-                    if(timing.startMs[i]<=relative)boundaryIndex=i;
+                    if(timing.startMs[i]<=mappedRelative)boundaryIndex=i;
                     else break;
                 }
                 tokenIndex=Math.min(tokens.size()-1,
