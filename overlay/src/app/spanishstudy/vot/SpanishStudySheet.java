@@ -19,8 +19,6 @@ import java.util.function.IntConsumer;
 import app.morphe.extension.shared.ui.Dim;
 import app.morphe.extension.shared.ui.SheetBottomDialog;
 import app.morphe.extension.shared.theme.ThemeUtils;
-import app.morphe.extension.youtube.patches.voiceovertranslation.VoiceOverTranslationPatch;
-import app.morphe.extension.youtube.settings.Settings;
 import app.morphe.extension.youtube.shared.PipDismissHelper;
 
 /** Native-style bottom sheet for the Spanish study controls. */
@@ -76,7 +74,7 @@ final class SpanishStudySheet {
                 value->SpanishStudyPrefs.setSubtitleWords(activity,value)));
 
         TextView captionNote=new TextView(activity);
-        captionNote.setText("English uses the same YouTube caption transcript used for dubbing, so both languages can be sized and positioned independently. If YouTube's own CC is already on for the current video, turn CC off once to avoid a duplicate English line.");
+        captionNote.setText("English and Spanish now share the same source-video segment and chunk clock, so both boxes change together. If YouTube's own CC is already on for the current video, turn CC off once to avoid a duplicate English line.");
         captionNote.setTextColor(secondary);
         captionNote.setTextSize(12);
         captionNote.setPadding(0,Dim.dp8,0,Dim.dp12);
@@ -90,18 +88,12 @@ final class SpanishStudySheet {
         geminiRow.setOnClickListener(v->SpanishStudyController.configureGemini(activity));
         content.addView(geminiRow);
 
-        content.addView(section(activity,"Audio",secondary));
-        content.addView(sliderRow(activity,fg,"Original audio under dub","%",0,100,
-                Settings.VOT_ORIGINAL_AUDIO_VOLUME.get(),value->{
-                    Settings.VOT_ORIGINAL_AUDIO_VOLUME.save(value);
-                    VoiceOverTranslationPatch.updateOriginalAudioMultiplier();
-                }));
-        TextView bgmNote=new TextView(activity);
-        bgmNote.setText("This is the practical BGM control: it changes the original video's volume while Spanish speech is playing. YouTube supplies music and English speech as one mixed track, so this cannot isolate music by itself.");
-        bgmNote.setTextColor(secondary);
-        bgmNote.setTextSize(12);
-        bgmNote.setPadding(0,Dim.dp4,0,Dim.dp12);
-        content.addView(bgmNote);
+        TextView audioNote=new TextView(activity);
+        audioNote.setText("Original-audio volume remains in Morphe's normal voice-over settings, so it is not duplicated here.");
+        audioNote.setTextColor(secondary);
+        audioNote.setTextSize(12);
+        audioNote.setPadding(0,Dim.dp8,0,Dim.dp4);
+        content.addView(audioNote);
 
         content.addView(section(activity,"Vocabulary",secondary));
         content.addView(switchRow(activity,fg,"Include very common words",
