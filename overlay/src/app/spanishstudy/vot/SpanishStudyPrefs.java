@@ -18,6 +18,7 @@ final class SpanishStudyPrefs {
             ENGLISH_SUBTITLE_TEXT_SIZE="english_subtitle_text_size_sp",
             SPANISH_SUBTITLE_BOTTOM="spanish_subtitle_bottom_dp",
             ENGLISH_SUBTITLE_BOTTOM="english_subtitle_bottom_dp",
+            SUBTITLE_PAIR_BOTTOM="bilingual_subtitle_bottom_dp",
             GEMINI_ENABLED="gemini_enabled",
             GEMINI_API_KEY="gemini_api_key",
             GEMINI_MODEL="gemini_model";
@@ -36,6 +37,7 @@ final class SpanishStudyPrefs {
     private static void putBoolean(Context c,String key,boolean value){prefs(c).edit().putBoolean(key,value).commit();}
     private static void putInt(Context c,String key,int value){prefs(c).edit().putInt(key,value).commit();}
     private static void putString(Context c,String key,String value){prefs(c).edit().putString(key,value).commit();}
+    private static int clampPosition(int v){return Math.max(24,Math.min(240,v));}
 
     static Set<String> knownWords(Context c){return new HashSet<>(prefs(c).getStringSet(KNOWN,Collections.emptySet()));}
     static boolean isKnown(Context c,String word){return knownWords(c).contains(VocabularyAnalyzer.normalize(word));}
@@ -44,19 +46,34 @@ final class SpanishStudyPrefs {
 
     static boolean showSubtitles(Context c){return prefs(c).getBoolean(SHOW_SUBS,true);}
     static void setShowSubtitles(Context c,boolean v){putBoolean(c,SHOW_SUBS,v);}
-    static boolean showEnglishSubtitles(Context c){return prefs(c).getBoolean(SHOW_ENGLISH_SUBS,false);}
+    static boolean showEnglishSubtitles(Context c){return prefs(c).getBoolean(SHOW_ENGLISH_SUBS,true);}
     static void setShowEnglishSubtitles(Context c,boolean v){putBoolean(c,SHOW_ENGLISH_SUBS,v);}
 
+    // Retained for compatibility with older installs; word-count chunking is no longer used.
     static int subtitleWords(Context c){return Math.max(4,Math.min(12,prefs(c).getInt(SUBTITLE_WORDS,7)));}
     static void setSubtitleWords(Context c,int v){putInt(c,SUBTITLE_WORDS,Math.max(4,Math.min(12,v)));}
     static int subtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(SUBTITLE_TEXT_SIZE,12)));}
     static void setSubtitleTextSize(Context c,int v){putInt(c,SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v)));}
     static int englishSubtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(ENGLISH_SUBTITLE_TEXT_SIZE,11)));}
     static void setEnglishSubtitleTextSize(Context c,int v){putInt(c,ENGLISH_SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v)));}
-    static int spanishSubtitleBottom(Context c){return Math.max(24,Math.min(240,prefs(c).getInt(SPANISH_SUBTITLE_BOTTOM,72)));}
-    static void setSpanishSubtitleBottom(Context c,int v){putInt(c,SPANISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v)));}
-    static int englishSubtitleBottom(Context c){return Math.max(24,Math.min(240,prefs(c).getInt(ENGLISH_SUBTITLE_BOTTOM,118)));}
-    static void setEnglishSubtitleBottom(Context c,int v){putInt(c,ENGLISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v)));}
+
+    // Legacy independent positions are kept only to migrate an existing user's preferred area.
+    static int spanishSubtitleBottom(Context c){return clampPosition(prefs(c).getInt(SPANISH_SUBTITLE_BOTTOM,72));}
+    static void setSpanishSubtitleBottom(Context c,int v){putInt(c,SPANISH_SUBTITLE_BOTTOM,clampPosition(v));}
+    static int englishSubtitleBottom(Context c){return clampPosition(prefs(c).getInt(ENGLISH_SUBTITLE_BOTTOM,118));}
+    static void setEnglishSubtitleBottom(Context c,int v){putInt(c,ENGLISH_SUBTITLE_BOTTOM,clampPosition(v));}
+
+    /**
+     * One shared anchor keeps Spanish directly above English as a bilingual pair. For users coming
+     * from an older build, start at the lower of the two legacy positions so the pair remains near
+     * the area they already chose rather than jumping somewhere new.
+     */
+    static int subtitlePairBottom(Context c){
+        SharedPreferences p=prefs(c);
+        if(p.contains(SUBTITLE_PAIR_BOTTOM))return clampPosition(p.getInt(SUBTITLE_PAIR_BOTTOM,72));
+        return Math.min(spanishSubtitleBottom(c),englishSubtitleBottom(c));
+    }
+    static void setSubtitlePairBottom(Context c,int v){putInt(c,SUBTITLE_PAIR_BOTTOM,clampPosition(v));}
 
     static int vocabLimit(Context c){return Math.max(10,Math.min(100,prefs(c).getInt(VOCAB_LIMIT,40)));}
     static void setVocabLimit(Context c,int v){putInt(c,VOCAB_LIMIT,Math.max(10,Math.min(100,v)));}
