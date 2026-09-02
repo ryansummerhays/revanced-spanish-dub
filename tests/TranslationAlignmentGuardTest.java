@@ -10,6 +10,10 @@ public final class TranslationAlignmentGuardTest {
         copiedEnglishFailsSpanishGuard();
         differentEnglishSentenceFailsSpanishGuard();
         shortAmbiguousTokenIsAllowed();
+        concatenatedSpanishFails();
+        groundedBackTranslationPasses();
+        hallucinatedBackTranslationFails();
+        missingNumberFailsGrounding();
         System.out.println("translation alignment guard: OK");
     }
 
@@ -54,6 +58,35 @@ public final class TranslationAlignmentGuardTest {
     private static void shortAmbiguousTokenIsAllowed() {
         require(TranslationAlignmentGuard.isSafeSpanishTranslation("Okay.", "OK."),
                 "short language-neutral tokens should not be over-filtered");
+    }
+
+    /** Reproduces v2.3.2 output such as "Sí,creíqueCausticseríalamejor...". */
+    private static void concatenatedSpanishFails() {
+        require(!TranslationAlignmentGuard.isSafeSpanishTranslation(
+                "Yeah, I figured Caustic would be the play because it's World's Edge and he's fun in general.",
+                "Sí,creíqueCausticseríalamejorjugadaporqueesWorldsEdgeyademásesdivertidoengeneral."),
+                "long Spanish text without normal word spacing must be rejected");
+    }
+
+    private static void groundedBackTranslationPasses() {
+        require(TranslationAlignmentGuard.isGroundedByBackTranslation(
+                "I figured Caustic would be the play because it's World's Edge and he's fun in general.",
+                "I thought Caustic would be the choice because it's World's Edge and he's fun in general."),
+                "faithful paraphrastic back-translation should pass");
+    }
+
+    private static void hallucinatedBackTranslationFails() {
+        require(!TranslationAlignmentGuard.isGroundedByBackTranslation(
+                "The terminal velocity will be roughly 1.3 meters per second for Doug's bowling ball.",
+                "The boat reaches the trench after several hours and the crew decides to turn around."),
+                "unrelated invented content should fail the grounding check");
+    }
+
+    private static void missingNumberFailsGrounding() {
+        require(!TranslationAlignmentGuard.isGroundedByBackTranslation(
+                "The R-99 does 12 damage at this range.",
+                "The weapon does a lot of damage at this range."),
+                "numeric/weapon anchors must survive the round trip");
     }
 
     private static void expectFailure(Runnable action) {
