@@ -68,7 +68,7 @@ final class SpanishStudySheet {
                 value->SpanishStudyPrefs.setSubtitlePairBottom(activity,value)));
 
         TextView captionNote=new TextView(activity);
-        captionNote.setText("Paired bilingual layout: Spanish on top and the exact matching English source below. Both switch on one shared source-video event. Short sentences stay whole; longer speech prefers real punctuation and source timing pauses. If no trustworthy pause exists, the phrase stays together rather than being chopped at an arbitrary width. The pair position is saved and scales into the smaller portrait player.");
+        captionNote.setText("Paired bilingual layout: Spanish on top and the exact matching English source below. Both switch on one shared source-video event. Short sentences stay whole; longer speech prefers real punctuation and source timing pauses. If no trustworthy pause exists, the phrase stays together rather than being chopped at an arbitrary width.");
         captionNote.setTextColor(secondary);
         captionNote.setTextSize(12);
         captionNote.setPadding(0,Dim.dp8,0,Dim.dp12);
@@ -82,21 +82,35 @@ final class SpanishStudySheet {
         geminiRow.setOnClickListener(v->SpanishStudyController.configureGemini(activity));
         content.addView(geminiRow);
 
-        content.addView(section(activity,"Dub expression",secondary));
-        content.addView(switchRow(activity,fg,"Match source expression (experimental)",
-                "Gently follows reliable pitch and energy changes in the original speaker",
-                SpanishStudyController.sourceExpressionEnabled(activity),
-                checked->SpanishStudyController.setSourceExpressionEnabled(activity,checked)));
+        content.addView(section(activity,"Playback & study",secondary));
+        LinearLayout buffer=valueRow(activity,fg,"Dub readiness",SpanishStudyController.dubBufferStatus());
+        buffer.setOnClickListener(v->Toast.makeText(activity,
+                SpanishStudyController.dubBufferStatus(),Toast.LENGTH_SHORT).show());
+        content.addView(buffer);
 
-        TextView expressionNote=new TextView(activity);
-        expressionNote.setText("This does not clone voices. It only transfers small relative pitch/energy movements to the selected Spanish Edge voice, with strong confidence checks and tight limits. Uncertain, silent, noisy, or rapidly changing audio falls back to neutral delivery. Android may ask for microphone permission because its playback Visualizer API requires RECORD_AUDIO; this feature attaches to YouTube's own playback audio session and does not save microphone or waveform audio. Speaker-specific voice switching is intentionally not enabled yet until we have a reliable speaker-embedding path that will not confuse yelling, whispering, or other delivery changes with a new person.");
-        expressionNote.setTextColor(secondary);
-        expressionNote.setTextSize(12);
-        expressionNote.setPadding(0,Dim.dp6,0,Dim.dp12);
-        content.addView(expressionNote);
+        LinearLayout replay=valueRow(activity,fg,"Replay current phrase","Replay");
+        replay.setOnClickListener(v->{
+            if(!SpanishStudyController.replayCurrentPhrase())
+                Toast.makeText(activity,"No active phrase to replay",Toast.LENGTH_SHORT).show();
+        });
+        content.addView(replay);
+
+        LinearLayout replayPrevious=valueRow(activity,fg,"Replay previous phrase","Replay");
+        replayPrevious.setOnClickListener(v->{
+            if(!SpanishStudyController.replayPreviousPhrase())
+                Toast.makeText(activity,"No previous phrase available",Toast.LENGTH_SHORT).show();
+        });
+        content.addView(replayPrevious);
+
+        TextView playbackNote=new TextView(activity);
+        playbackNote.setText("Spanish playback is hard-linked to the YouTube transport: pause/buffering pauses the Edge voice in place, resume continues the same MP3, and seeking cancels stale speech and re-targets the source phrase. Natural phrasing uses punctuation and TTS word timing only—no microphone, playback Visualizer, speaker recording, or room-audio measurement. Dub audio stays in a small bounded in-memory cache only; full videos are not saved to storage.");
+        playbackNote.setTextColor(secondary);
+        playbackNote.setTextSize(12);
+        playbackNote.setPadding(0,Dim.dp6,0,Dim.dp12);
+        content.addView(playbackNote);
 
         TextView audioNote=new TextView(activity);
-        audioNote.setText("Original-audio volume and max speech rate remain in Morphe's normal voice-over settings. Source expression is independent of synchronization: playback speed still adapts to the source timeline while pitch movement stays small and separately controlled.");
+        audioNote.setText("Original-audio volume and max speech rate remain in Morphe's normal voice-over settings. The dub buffer prepares nearby phrases ahead of the playhead, but memory use is bounded and disappears when the app process ends.");
         audioNote.setTextColor(secondary);
         audioNote.setTextSize(12);
         audioNote.setPadding(0,Dim.dp4,0,Dim.dp4);
