@@ -12,21 +12,18 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegment;
 
 /**
- * Displays the translated Spanish dub and English source subtitles on one shared timeline.
+ * Displays one complete English source clause and its complete Spanish translation on one clock.
  *
- * The English/source transcript is authoritative for timing. Spanish is selected by the exact
- * same segment index, and both boxes use the same chunk number and chunk transition instants.
- * This prevents either language from lagging a box behind the other after seeks or when Spanish
- * and English have different word counts/speech rhythms.
+ * v2.2.3 deliberately does NOT divide each language independently by word count. The source
+ * transcript is split into compact semantic clauses before translation. Each clause is translated
+ * 1:1, receives one immutable source time slot, and both boxes change on that same slot boundary.
+ * Pausing therefore shows the complete meaning pair instead of two proportional word fragments.
  */
 final class SpanishSubtitleOverlay {
-    private static final Pattern TOKEN = Pattern.compile("\\S+");
     private static Activity activity;
     private static TextView spanishView;
     private static TextView englishView;
@@ -52,36 +49,28 @@ final class SpanishSubtitleOverlay {
 
         final int index = findSourceIndex(timeMs);
         if (index < 0) {
-            spanishView.setVisibility(View.GONE);
-            englishView.setVisibility(View.GONE);
+            hidePair();
             return;
         }
 
         TranscriptSegment english = englishSegments.get(index);
         TranscriptSegment spanish = matchingSpanish(index, english);
-        updatePair(a, english, spanish, timeMs);
+        updatePair(a, english, spanish);
     }
 
     private static void updatePair(Activity a,
                                    TranscriptSegment english,
-                                   TranscriptSegment spanish,
-                                   long timeMs) {
-        List<String> englishTokens = tokens(english == null ? null : english.text);
-        List<String> spanishTokens = tokens(spanish == null ? null : spanish.text);
-
-        final int preferredWords = SpanishStudyPrefs.subtitleWords(a);
-        SynchronizedSubtitleChunks.Window window = SynchronizedSubtitleChunks.window(
-                englishTokens.size(), spanishTokens.size(), preferredWords,
-                english.startMs, english.endMs, timeMs);
+                                   TranscriptSegment spanish) {
+        String englishText = english == null || english.text == null ? "" : english.text.trim();
+        String spanishText = spanish == null || spanish.text == null ? "" : spanish.text.trim();
 
         if (SpanishStudyPrefs.showEnglishSubtitles(a)
                 && english != null
                 && english.lang != null
                 && english.lang.toLowerCase().startsWith("en")
-                && !englishTokens.isEmpty()) {
-            String chunk = join(englishTokens, window.englishStart, window.englishEnd);
-            if (!chunk.contentEquals(englishView.getText())) englishView.setText(chunk);
-            englishView.setVisibility(chunk.isBlank() ? View.GONE : View.VISIBLE);
+                && !englishText.isBlank()) {
+            if (!englishText.contentEquals(englishView.getText())) englishView.setText(englishText);
+            englishView.setVisibility(View.VISIBLE);
         } else {
             englishView.setVisibility(View.GONE);
         }
@@ -90,19 +79,15 @@ final class SpanishSubtitleOverlay {
                 && spanish != null
                 && spanish.lang != null
                 && spanish.lang.toLowerCase().startsWith("es")
-                && !spanishTokens.isEmpty()) {
-            String chunk = join(spanishTokens, window.spanishStart, window.spanishEnd);
-            if (!chunk.contentEquals(spanishView.getText())) spanishView.setText(chunk);
-            spanishView.setVisibility(chunk.isBlank() ? View.GONE : View.VISIBLE);
+                && !spanishText.isBlank()) {
+            if (!spanishText.contentEquals(spanishView.getText())) spanishView.setText(spanishText);
+            spanishView.setVisibility(View.VISIBLE);
         } else {
             spanishView.setVisibility(View.GONE);
         }
     }
 
-    /**
-     * The source/English segment is the single clock for both languages. This is intentionally
-     * one cursor rather than independent English/Spanish cursors.
-     */
+    /** The English/source clause is the single timing authority for both languages. */
     private static int findSourceIndex(long timeMs) {
         List<TranscriptSegment> local = englishSegments;
         if (local.isEmpty()) return -1;
@@ -116,8 +101,8 @@ final class SpanishSubtitleOverlay {
     }
 
     /**
-     * Gemini v2.2 preserves 1:1 segment ordering. The timestamp fallback keeps the overlay safe if
-     * a non-Gemini provider ever returns a differently shaped snapshot.
+     * Translation preserves 1:1 clause ordering. Timestamp lookup is retained as a safe fallback
+     * if a provider publishes an otherwise equivalent snapshot with a different list position.
      */
     private static TranscriptSegment matchingSpanish(int sourceIndex, TranscriptSegment source) {
         if (sourceIndex >= 0 && sourceIndex < spanishSegments.size()) {
@@ -130,27 +115,11 @@ final class SpanishSubtitleOverlay {
         return null;
     }
 
-    private static List<String> tokens(String text) {
-        List<String> out = new ArrayList<>();
-        if (text == null || text.isBlank()) return out;
-        Matcher matcher = TOKEN.matcher(text);
-        while (matcher.find()) out.add(matcher.group());
-        return out;
-    }
-
-    private static String join(List<String> words, int start, int end) {
-        if (words.isEmpty()) return "";
-        int safeStart = Math.max(0, Math.min(words.size(), start));
-        int safeEnd = Math.max(safeStart, Math.min(words.size(), end));
-        StringBuilder out = new StringBuilder();
-        for (int i = safeStart; i < safeEnd; i++) {
-            if (out.length() > 0) out.append(' ');
-            out.append(words.get(i));
-        }
-        return out.toString();
-    }
-
     static void hide() {
+        hidePair();
+    }
+
+    private static void hidePair() {
         if (spanishView != null) spanishView.setVisibility(View.GONE);
         if (englishView != null) englishView.setVisibility(View.GONE);
     }
@@ -172,7 +141,9 @@ final class SpanishSubtitleOverlay {
         view.setTextColor(Color.WHITE);
         view.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         view.setGravity(Gravity.CENTER);
-        view.setMaxLines(2);
+        // Clauses are intentionally compact, but allow a third line so no relevant words are
+        // silently clipped when Spanish expands relative to English.
+        view.setMaxLines(3);
         view.setPadding(dp(a, 8), dp(a, 4), dp(a, 8), dp(a, 4));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0xB8000000);
