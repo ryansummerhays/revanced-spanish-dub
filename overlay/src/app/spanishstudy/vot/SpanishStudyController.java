@@ -36,6 +36,20 @@ public final class SpanishStudyController {
 
     public static void onSessionDisabled(){SpanishSubtitleOverlay.hide();}
 
+    public static boolean isGeminiEnabled(Activity activity){
+        return activity!=null&&SpanishStudyPrefs.geminiEnabled(activity);
+    }
+
+    public static boolean hasGeminiApiKey(Activity activity){
+        return activity!=null&&!SpanishStudyPrefs.geminiApiKey(activity).trim().isEmpty();
+    }
+
+    public static void setGeminiEnabled(Activity activity,boolean enabled){
+        if(activity!=null)SpanishStudyPrefs.setGeminiEnabled(activity,enabled);
+    }
+
+    public static void configureGemini(Activity activity){showGeminiSetup(activity);}
+
     /** Called by the Edge TTS engine immediately before a fresh synthesis of this exact text. */
     public static void beginWordTimings(String text){SpanishWordTimingStore.begin(text);}
 
@@ -59,6 +73,17 @@ public final class SpanishStudyController {
             if(!c)SpanishSubtitleOverlay.hide();
         });
         layout.addView(subtitles);
+
+        TextView sizeLabel=new TextView(activity);
+        sizeLabel.setText("Subtitle text size (sp)");
+        layout.addView(sizeLabel);
+        NumberPicker textSize=new NumberPicker(activity);
+        textSize.setMinValue(8);
+        textSize.setMaxValue(18);
+        textSize.setValue(SpanishStudyPrefs.subtitleTextSize(activity));
+        textSize.setWrapSelectorWheel(false);
+        textSize.setOnValueChangedListener((p,o,n)->SpanishStudyPrefs.setSubtitleTextSize(activity,n));
+        layout.addView(textSize,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView chunkLabel=new TextView(activity);
         chunkLabel.setText("Subtitle words per chunk");
@@ -158,6 +183,7 @@ public final class SpanishStudyController {
                     boolean ready=!SpanishStudyPrefs.geminiApiKey(activity).trim().isEmpty();
                     SpanishStudyPrefs.setGeminiEnabled(activity,ready);
                     Toast.makeText(activity,ready?"Gemini translation enabled":"Gemini disabled: no API key",Toast.LENGTH_SHORT).show();
+                    if(ready)VoiceOverTranslationPatch.reloadTranscript();
                 })
                 .setNegativeButton("Cancel",null)
                 .show();
