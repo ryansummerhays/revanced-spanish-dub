@@ -22,10 +22,13 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Professional-style bilingual study subtitles.
  *
- * Each event is one short semantic sentence/clause. Spanish is always the top line and the matching
- * English source is immediately below it. Both lines use the exact same immutable source event and
- * switch at the exact same instant. Each language is restricted to one line; semantic segmentation
- * targets 25-38 characters and normally caps source events at 42 characters before translation.
+ * Each event is one semantic sentence/clause. Spanish is always the top line and the matching
+ * English source is immediately below it. Both languages use the exact same immutable source event
+ * and switch at the same instant.
+ *
+ * Short events remain one line. Longer natural clauses are allowed to wrap to a small number of
+ * centered lines rather than being silently clipped at the player edge. Preserving every word in a
+ * pause-able bilingual event is more important than enforcing a one-line cosmetic target.
  *
  * The pair has one shared vertical anchor, which prevents the two languages from drifting apart
  * spatially and lets portrait mode map the whole pair proportionally into YouTube's smaller player.
@@ -72,8 +75,6 @@ final class SpanishSubtitleOverlay {
         String englishText = english == null || english.text == null ? "" : english.text.trim();
         String spanishText = spanish == null || spanish.text == null ? "" : spanish.text.trim();
 
-        // Spanish is intentionally the first/top line: dual-subtitle viewers tend to give the top
-        // line more visual attention, and Spanish is the target language for this study mode.
         if (SpanishStudyPrefs.showSubtitles(a)
                 && spanish != null
                 && spanish.lang != null
@@ -171,8 +172,8 @@ final class SpanishSubtitleOverlay {
         view.setTextColor(Color.WHITE);
         view.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         view.setGravity(Gravity.CENTER);
-        view.setSingleLine(true);
-        view.setMaxLines(1);
+        view.setSingleLine(false);
+        view.setMaxLines(3);
         view.setHorizontallyScrolling(false);
         view.setEllipsize(null);
         view.setPadding(dp(a, 8), dp(a, 3), dp(a, 8), dp(a, 3));
@@ -219,8 +220,8 @@ final class SpanishSubtitleOverlay {
 
     private static void updateTextSize(TextView view, int preferredSp) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // A short translation may expand slightly versus English. Shrink only enough to keep a
-            // professional single line; segmentation/concise translation should do most of the work.
+            // Prefer the chosen size, but permit a modest shrink before wrapping. Wrapping then
+            // preserves the complete semantic event instead of dropping the right-hand tail.
             int minSp = Math.max(8, preferredSp - 3);
             view.setAutoSizeTextTypeUniformWithConfiguration(
                     minSp, Math.max(minSp, preferredSp), 1, TypedValue.COMPLEX_UNIT_SP);
