@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.2.1 patch bundle
+name: Build Spanish Dub Study v2.2.2 patch bundle
 
 on:
   workflow_dispatch:
@@ -46,12 +46,14 @@ jobs:
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SynchronizedSubtitleChunksTest
 
-      - name: Apply Spanish study v2.2.1 overlay
+      - name: Apply Spanish study v2.2.2 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
           python3 scripts/patch_bilingual_subtitles.py upstream
           python3 scripts/patch_autodub_timeline.py upstream
+          python3 scripts/patch_quickstart_gemini.py upstream
+          python3 scripts/patch_autostart_session.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -61,7 +63,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.2.1 bundle
+      - name: Rebrand and package v2.2.2 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -70,8 +72,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.2.1.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.1\nDescription: AutoDub-style full-context Gemini translation with immutable seek-safe timing, synchronized English/Spanish subtitle boxes, movable bilingual subtitles, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.2.2.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.2\nDescription: Quick-start Gemini dubbing with whole-transcript context, per-batch timeout/fallback, automatic per-video session loading, persistent study settings, immutable seek-safe timing, synchronized bilingual subtitles, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.2\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -86,7 +88,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.2.1
+          name: spanish-dub-study-patches-v2.2.2
           path: dist/
           if-no-files-found: error
           retention-days: 30
