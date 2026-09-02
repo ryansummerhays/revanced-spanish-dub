@@ -30,6 +30,9 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
  * centered lines rather than being silently clipped at the player edge. Preserving every word in a
  * pause-able bilingual event is more important than enforcing a one-line cosmetic target.
  *
+ * The English display may use a conservative Gemini context correction for obvious ASR/proper-noun
+ * errors. That changes only displayed text; immutable source timing/IDs remain authoritative.
+ *
  * The pair has one shared vertical anchor, which prevents the two languages from drifting apart
  * spatially and lets portrait mode map the whole pair proportionally into YouTube's smaller player.
  */
@@ -72,7 +75,9 @@ final class SpanishSubtitleOverlay {
     private static void updatePair(Activity a,
                                    TranscriptSegment english,
                                    TranscriptSegment spanish) {
-        String englishText = english == null || english.text == null ? "" : english.text.trim();
+        String rawEnglish = english == null || english.text == null ? "" : english.text.trim();
+        String englishText = english == null ? rawEnglish : TranscriptCorrectionStore.get(
+                english.startMs, english.endMs, rawEnglish);
         String spanishText = spanish == null || spanish.text == null ? "" : spanish.text.trim();
 
         if (SpanishStudyPrefs.showSubtitles(a)
@@ -220,8 +225,6 @@ final class SpanishSubtitleOverlay {
 
     private static void updateTextSize(TextView view, int preferredSp) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Prefer the chosen size, but permit a modest shrink before wrapping. Wrapping then
-            // preserves the complete semantic event instead of dropping the right-hand tail.
             int minSp = Math.max(8, preferredSp - 3);
             view.setAutoSizeTextTypeUniformWithConfiguration(
                     minSp, Math.max(minSp, preferredSp), 1, TypedValue.COMPLEX_UNIT_SP);
@@ -230,11 +233,6 @@ final class SpanishSubtitleOverlay {
         }
     }
 
-    /**
-     * Landscape/fullscreen uses the saved shared position directly. In portrait we find YouTube's
-     * actual player-controls view, scale that position by current player height, and anchor the pair
-     * to the real player bottom. If controls are not ready, use a temporary 16:9 estimate.
-     */
     private static int resolvedBottomMarginPx(Activity a, int configuredBottomDp) {
         final int basePx = dp(a, configuredBottomDp);
         if (a.getResources().getConfiguration().orientation != Configuration.ORIENTATION_PORTRAIT) {
