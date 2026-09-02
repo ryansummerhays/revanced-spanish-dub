@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.3.0 patch bundle
+name: Build Spanish Dub Study v2.3.1 patch bundle
 
 on:
   workflow_dispatch:
@@ -52,7 +52,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.3.0 overlay
+      - name: Apply Spanish study v2.3.1 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -73,7 +73,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.3.0 bundle
+      - name: Rebrand and package v2.3.1 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -82,8 +82,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.3.0.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.0\nDescription: Natural-phrase real-time Spanish dubbing with paired bilingual subtitles plus opt-in source-expression matching. The selected Spanish Edge voice can gently follow reliable relative pitch and energy movement from YouTube's own playback audio while keeping synchronization speed independent; source expression is tightly bounded, confidence-gated, adapts to sustained voice changes, and fails neutral when audio is uncertain. No source waveform is saved or transmitted. Speaker-specific voice switching remains intentionally disabled until a reliable speaker-embedding/PCM path can meet conservative false-switch requirements. Includes immutable source-ID translation alignment, English-result rejection before Spanish TTS, natural punctuation/timing phrase boundaries, portrait-responsive subtitles, live speech-rate changes, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.3.1.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.1\nDescription: Subtitle reliability update on top of v2.3.0. Long bilingual semantic events now wrap to a small number of centered lines instead of silently clipping at the player edge, preserving the complete pause-able English/Spanish pair. Spanish results rejected as untranslated English receive an immediate single-line Google rescue attempt before the slot is allowed to remain untranslated, reducing brief returns to normal source audio. Retains opt-in conservative source-expression matching, immutable source-ID translation alignment, natural punctuation/timing phrase boundaries, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -98,7 +98,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.3.0
+          name: spanish-dub-study-patches-v2.3.1
           path: dist/
           if-no-files-found: error
           retention-days: 30
