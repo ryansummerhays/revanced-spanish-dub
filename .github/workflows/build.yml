@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.4.0 patch bundle
+name: Build Spanish Dub Study v2.5.0 patch bundle
 
 on:
   workflow_dispatch:
@@ -43,12 +43,14 @@ jobs:
             overlay/src/app/spanishstudy/vot/TranslationAlignmentGuard.java \
             overlay/src/app/spanishstudy/vot/TranscriptCorrectionStore.java \
             overlay/src/app/spanishstudy/vot/SourceExpressionMath.java \
+            overlay/src/app/spanishstudy/vot/NaturalProsodyFormatter.java \
             tests/VocabularyAnalyzerTest.java \
             tests/SemanticClauseSplitterTest.java \
             tests/SourceCaptionTimingStoreTest.java \
             tests/TranslationAlignmentGuardTest.java \
             tests/TranscriptCorrectionStoreTest.java \
             tests/SourceExpressionMathTest.java \
+            tests/NaturalProsodyFormatterTest.java \
             tests/WholeTranscriptDesignTest.java
           java -cp /tmp/spanish-study-test VocabularyAnalyzerTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SemanticClauseSplitterTest
@@ -56,9 +58,10 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranscriptCorrectionStoreTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.NaturalProsodyFormatterTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.4.0 overlay
+      - name: Apply Spanish study v2.5.0 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -71,9 +74,13 @@ jobs:
           python3 scripts/patch_autostart_session.py upstream
           python3 scripts/patch_live_speech_rate.py upstream
           python3 scripts/patch_translation_language_guard.py upstream
-          python3 scripts/patch_source_expression.py upstream
           python3 scripts/patch_atomic_dub_events.py upstream
           python3 scripts/patch_progressive_prefetch.py upstream
+          python3 scripts/patch_transport_sync.py upstream
+          python3 scripts/patch_natural_prosody.py upstream
+          python3 scripts/patch_study_transport_tools.py upstream
+          python3 scripts/patch_bounded_prefetch_window.py upstream
+          python3 scripts/patch_subtitle_study_gestures.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -83,7 +90,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.4.0 bundle
+      - name: Rebrand and package v2.5.0 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -92,8 +99,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.4.0.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.4.0\nDescription: Atomic source-timed dubbing reliability release. YouTube JSON3 inner caption tOffsetMs timing is preserved into a source-word timeline so natural bilingual phrase boundaries use actual source word timing whenever available instead of sentence-wide character interpolation. Accepted Spanish slots are atomic and cannot be rewritten underneath visible subtitles or active TTS by later progressive publications. A slot is no longer marked spoken until audio really starts; transient Edge synthesis failures clear the busy state and retry rather than silently dropping Spanish. Cached and newly synthesized Edge MP3 audio is measured exactly at playback time, rate is recalculated from the actual remaining source slot, and only the minimum leading audio is trimmed when even the configured max rate cannot fit, preventing cumulative late-video drift. TTS prefetch begins as translated snapshots arrive, preserves the real playhead across same-video updates, looks farther ahead, and uses bounded failure backoff so long videos do not spend their early minutes entirely on on-demand synthesis or lose a minute after one network error. Contextual Gemini ASR corrections remain provisional until the paired Spanish passes deterministic validation and are rolled back if the independent back-translation grounding check fails. Retains grounded long-video Gemini context, normal-space validation, natural phrase segmentation, immutable source IDs/timestamps, conservative source-expression matching, portrait-responsive bilingual subtitles, live speech-rate changes, per-video autostart, persistent settings and vocabulary tools based on Morphe 1.41.0\nVersion: 2.4.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.5.0.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.5.0\nDescription: Transport-synchronized study release. Edge Spanish is now redundantly hard-linked to YouTube's source clock: the normal VideoState callbacks remain, while an independent video-time watchdog pauses the active MP3 in place whenever the source is paused, errored, or stalled/buffering and resumes the exact same audio position only when source time advances again. The old playback-Visualizer source-expression path is removed from the build, so no RECORD_AUDIO permission, microphone, speaker-output analysis, or room-noise measurement is used. Natural Edge delivery instead gets conservative punctuation-aware SSML while preserving Morphe/Edge word-boundary timing. Accepted translated slots remain atomic; real JSON3 source-word timing, measured Edge duration fitting, retry-safe synthesis, grounded Gemini corrections, and long-video contextual validation are retained. Study tools now show contiguous dub readiness, can replay the current or previous phrase by seeking the VIDEO so picture/original audio/subtitles/dub stay aligned, and support tap-to-replay / long-press-previous directly on the Spanish subtitle. TTS preparation follows a moving three-minute-ahead/fourty-five-second-behind window and the in-memory LRU is capped at 400 phrases; full videos are not persisted to disk and the buffer disappears with the app process. Based on Morphe 1.41.0\nVersion: 2.5.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -108,7 +115,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.4.0
+          name: spanish-dub-study-patches-v2.5.0
           path: dist/
           if-no-files-found: error
           retention-days: 30
