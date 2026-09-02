@@ -14,9 +14,12 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
@@ -26,11 +29,11 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
 /**
  * Direct Gemini transcript translator for the Spanish-study overlay.
  *
- * Alignment is data integrity: Gemini must return every translation keyed to an immutable source
- * event ID and echo the raw caption text exactly. v2.3.2 additionally supplies YouTube title,
- * creator and description context and asks Gemini to infer domain terminology/jargon from the whole
- * transcript before translating. A separate correctedSource field may clean a high-confidence ASR
- * error for English subtitle display, while raw source text/timestamps remain the immutable clock.
+ * v2.3.3 keeps Gemini source-grounded without repeatedly stuffing an entire long transcript into
+ * every request. Metadata and a compact whole-video recurring-term index provide global subject
+ * context, while each request receives a bounded local transcript window. Gemini still echoes the
+ * immutable raw source ID/text, and an independent Google back-translation is used as a conservative
+ * faithfulness check before Spanish is accepted for subtitle/TTS playback.
  */
 public final class GeminiTranslator {
     private static final int CONNECT_TIMEOUT_MS = 7_000;
@@ -42,6 +45,17 @@ public final class GeminiTranslator {
     private static final int MAX_PREPARED_TRANSCRIPTS = 3;
     private static final int MAX_VIDEO_METADATA = 4;
     private static final int MAX_DESCRIPTION_CHARS = 2_400;
+    private static final int LOCAL_CONTEXT_RADIUS = 7;
+    private static final int MAX_RECURRING_TERMS = 120;
+
+    private static final Set<String> CONTEXT_STOP_WORDS = new HashSet<>(List.of(
+            "the","and","that","this","with","from","have","has","had","were","was","are","is",
+            "for","you","your","they","their","our","but","not","just","like","yeah","yes","no",
+            "what","when","where","which","who","why","how","would","could","should","will","can",
+            "get","got","getting","going","want","wanted","really","very","more","most","some","then",
+            "than","there","here","into","about","because","also","only","thing","things","something",
+            "its","it's","im","i'm","dont","don't","didnt","didn't","doesnt","doesn't","gonna","wanna"
+    ));
 
     private static final Map<String, PreparedTranscript> PREPARED =
             new LinkedHashMap<String, PreparedTranscript>(4, 0.75f, true) {
@@ -70,8 +84,7 @@ public final class GeminiTranslator {
 
     /**
      * Called from TranscriptFetcher using the same Innertube player response that supplied captions.
-     * No extra YouTube request is needed. Description is deliberately capped before it reaches the
-     * repeated progressive translation prompts.
+     * No extra YouTube request is needed. Description is deliberately capped.
      */
     public static synchronized void prepareVideoMetadata(String videoId,
                                                          String title,
@@ -84,14 +97,14 @@ public final class GeminiTranslator {
                 cleanMetadata(description, MAX_DESCRIPTION_CHARS)));
     }
 
-    /** Capture the complete immutable source transcript before Morphe splits it into batches. */
+    /** Capture the immutable source list and a compact whole-video subject index before batching. */
     public static synchronized void prepareTranscript(String videoId,
                                                       List<TranscriptSegment> segments,
                                                       String targetLang) {
         if (videoId == null || segments == null || segments.isEmpty()) return;
         List<TranscriptSegment> snapshot = new ArrayList<>(segments);
         PREPARED.put(cacheKey(videoId, targetLang),
-                new PreparedTranscript(snapshot, buildFullContext(videoId, snapshot)));
+                new PreparedTranscript(snapshot, buildGlobalContext(videoId, snapshot)));
     }
 
     /** Full blocking helper retained for compatibility/non-playback uses. */
@@ -110,9 +123,10 @@ public final class GeminiTranslator {
             int end = Math.min(segments.size(), start + OUTPUT_SEGMENTS_PER_REQUEST);
             List<String> block;
             try {
-                block = translateRange(prepared.fullContext, prepared.segments, start, end, targetLang);
+                block = translateRange(prepared.globalContext, prepared.segments, start, end, targetLang);
             } catch (Exception ex) {
-                Logger.printDebug(() -> "Gemini full-transcript block failed alignment/latency check; using Google fallback", ex);
+                Logger.printDebug(() -> "Gemini block failed; using Google fallback: "
+                        + ex.getClass().getSimpleName() + ": " + ex.getMessage());
                 block = translateFallback(prepared.segments.subList(start, end), targetLang);
             }
             if (block.size() != end - start) {
@@ -136,9 +150,8 @@ public final class GeminiTranslator {
     }
 
     /**
-     * Translate one progressive dispatcher batch. Gemini still receives the complete source
-     * transcript plus video metadata as context, but each response item carries its immutable source
-     * ID and exact raw source echo. Response ordering is therefore irrelevant.
+     * Translate one progressive dispatcher batch. Long videos use a bounded prompt: global metadata
+     * and recurring terms + a local transcript window around the requested immutable IDs.
      */
     public static List<String> translateBatch(String videoId,
                                               List<TranscriptSegment> segments,
@@ -155,13 +168,14 @@ public final class GeminiTranslator {
         int start = findBatchStart(prepared.segments, segments);
         try {
             if (start < 0) {
-                String localContext = buildFullContext(videoId, segments);
-                return translateRange(localContext, segments, 0, segments.size(), targetLang);
+                String localGlobalContext = buildGlobalContext(videoId, segments);
+                return translateRange(localGlobalContext, segments, 0, segments.size(), targetLang);
             }
-            return translateRange(prepared.fullContext, prepared.segments,
+            return translateRange(prepared.globalContext, prepared.segments,
                     start, start + segments.size(), targetLang);
         } catch (Exception ex) {
-            Logger.printDebug(() -> "Gemini batch timed out/failed alignment validation; using Google fallback", ex);
+            Logger.printDebug(() -> "Gemini batch failed; using Google fallback: "
+                    + ex.getClass().getSimpleName() + ": " + ex.getMessage());
             return translateFallback(segments, targetLang);
         }
     }
@@ -205,7 +219,7 @@ public final class GeminiTranslator {
         return a != null && b != null && a.startMs == b.startMs && a.endMs == b.endMs;
     }
 
-    private static List<String> translateRange(String fullContext,
+    private static List<String> translateRange(String globalContext,
                                                List<TranscriptSegment> segments,
                                                int start,
                                                int end,
@@ -228,7 +242,7 @@ public final class GeminiTranslator {
         conn.setRequestProperty("x-goog-api-key", apiKey);
         conn.setDoOutput(true);
 
-        JSONObject request = buildRequest(fullContext, start, end, targetLang);
+        JSONObject request = buildRequest(globalContext, segments, start, end, targetLang);
         try (OutputStream out = conn.getOutputStream()) {
             out.write(request.toString().getBytes(StandardCharsets.UTF_8));
         }
@@ -258,6 +272,7 @@ public final class GeminiTranslator {
         }
 
         Map<Integer, String> translationsById = new HashMap<>();
+        Map<Integer, String> intendedSourceById = new HashMap<>();
         for (int i = 0; i < arr.length(); i++) {
             JSONObject item = arr.optJSONObject(i);
             if (item == null) throw new Exception("Gemini item " + i + " is not an object");
@@ -273,24 +288,104 @@ public final class GeminiTranslator {
             TranscriptSegment canonicalSegment = segments.get(id);
             String sourceEcho = item.optString("source", "");
             String correctedSource = item.optString("correctedSource", sourceEcho).trim();
-            String translation = item.optString("translation", "").trim();
-            TranslationAlignmentGuard.validate(
-                    canonicalSegment.text,
-                    sourceEcho,
-                    translation,
-                    neighboringSourceTexts(segments, id));
+            String translation = TranslationAlignmentGuard.normalize(
+                    item.optString("translation", ""));
 
-            // Display correction is side data only. The store independently rejects broad rewrites.
+            // Display correction is side data only; the store independently rejects broad rewrites.
             TranscriptCorrectionStore.put(canonicalSegment.startMs, canonicalSegment.endMs,
                     canonicalSegment.text, correctedSource);
-            translationsById.put(id, translation);
+            String acceptedSource = TranscriptCorrectionStore.get(
+                    canonicalSegment.startMs, canonicalSegment.endMs, canonicalSegment.text);
+            intendedSourceById.put(id, acceptedSource);
+
+            try {
+                TranslationAlignmentGuard.validate(
+                        canonicalSegment.text,
+                        sourceEcho,
+                        translation,
+                        neighboringSourceTexts(segments, id));
+                translationsById.put(id, translation);
+            } catch (IllegalArgumentException badLine) {
+                final int badId = id;
+                Logger.printDebug(() -> "Gemini subtitle rejected for slot " + badId + ": "
+                        + badLine.getMessage());
+                translationsById.put(id, null);
+            }
+        }
+
+        // Independent semantic cross-check. Google translates Gemini's Spanish back to English in
+        // one batch; a clearly unrelated round trip is rejected. If this verifier is unavailable,
+        // deterministic source/spacing/language/anchor guards still remain in force.
+        if (targetLang != null && targetLang.toLowerCase(Locale.ROOT).startsWith("es")) {
+            List<Integer> verifyIds = new ArrayList<>();
+            List<String> verifySpanish = new ArrayList<>();
+            for (int id = start; id < end; id++) {
+                String candidate = translationsById.get(id);
+                if (candidate != null && !candidate.isBlank()) {
+                    verifyIds.add(id);
+                    verifySpanish.add(candidate);
+                }
+            }
+            if (!verifySpanish.isEmpty()) {
+                try {
+                    List<String> backTranslations = TextTranslator.translate(verifySpanish, "en");
+                    int limit = Math.min(verifyIds.size(), backTranslations.size());
+                    for (int i = 0; i < limit; i++) {
+                        int id = verifyIds.get(i);
+                        if (!TranslationAlignmentGuard.isGroundedByBackTranslation(
+                                intendedSourceById.get(id), backTranslations.get(i))) {
+                            final int rejectedId = id;
+                            Logger.printDebug(() -> "Gemini translation failed independent grounding check: "
+                                    + rejectedId);
+                            translationsById.put(id, null);
+                        }
+                    }
+                } catch (Exception verifierError) {
+                    Logger.printDebug(() -> "Independent translation verifier unavailable: "
+                            + verifierError.getClass().getSimpleName() + ": "
+                            + verifierError.getMessage());
+                }
+            }
+        }
+
+        // Rescue only rejected/missing lines, in one forward Google batch, using the accepted
+        // corrected English when a conservative contextual correction survived the side-data gate.
+        List<Integer> rescueIds = new ArrayList<>();
+        List<String> rescueSources = new ArrayList<>();
+        for (int id = start; id < end; id++) {
+            String translation = translationsById.get(id);
+            if (translation == null || translation.isBlank()) {
+                rescueIds.add(id);
+                String intended = intendedSourceById.get(id);
+                rescueSources.add(intended == null || intended.isBlank()
+                        ? segments.get(id).text : intended);
+            }
+        }
+        if (!rescueSources.isEmpty()) {
+            try {
+                List<String> rescued = TextTranslator.translate(rescueSources, targetLang);
+                int limit = Math.min(rescueIds.size(), rescued.size());
+                for (int i = 0; i < limit; i++) {
+                    int id = rescueIds.get(i);
+                    String candidate = TranslationAlignmentGuard.normalize(rescued.get(i));
+                    if (TranslationAlignmentGuard.isSafeSpanishTranslation(
+                            intendedSourceById.get(id), candidate)) {
+                        translationsById.put(id, candidate);
+                    }
+                }
+            } catch (Exception rescueError) {
+                Logger.printDebug(() -> "Rejected Gemini line rescue failed: "
+                        + rescueError.getClass().getSimpleName() + ": " + rescueError.getMessage());
+            }
         }
 
         List<String> result = new ArrayList<>(expected);
         for (int id = start; id < end; id++) {
             String translation = translationsById.get(id);
             if (translation == null || translation.isBlank()) {
-                throw new Exception("Gemini omitted subtitle ID: " + id);
+                // Keep raw source language rather than fabricating Spanish. The downstream language
+                // guard refuses to speak it with a Spanish voice, making uncertainty fail safe.
+                translation = segments.get(id).text;
             }
             result.add(translation);
         }
@@ -307,55 +402,90 @@ public final class GeminiTranslator {
         return neighbors;
     }
 
-    private static String buildFullContext(String videoId, List<TranscriptSegment> segments) {
-        StringBuilder context = new StringBuilder(Math.max(4600, segments.size() * 48));
+    /**
+     * Whole-video context that stays small even on a 90-minute video. Repeated unusual raw terms are
+     * useful evidence for niche jargon/ASR correction without paying to resend every transcript line
+     * on every progressive Gemini request.
+     */
+    private static String buildGlobalContext(String videoId, List<TranscriptSegment> segments) {
+        StringBuilder context = new StringBuilder(5_500);
         VideoMetadata metadata;
         synchronized (GeminiTranslator.class) {
             metadata = VIDEO_METADATA.get(videoId == null ? "" : videoId);
         }
         context.append("VIDEO / SUBJECT CONTEXT\n");
         if (metadata == null) {
-            context.append("No reliable YouTube metadata was available. Infer subject/domain only from repeated transcript evidence.\n");
+            context.append("No reliable YouTube metadata was available. Infer domain conservatively from local transcript evidence.\n");
         } else {
             if (!metadata.title.isBlank()) context.append("Title: ").append(metadata.title).append('\n');
             if (!metadata.author.isBlank()) context.append("Creator/channel: ").append(metadata.author).append('\n');
-            if (!metadata.description.isBlank()) context.append("Description: ").append(metadata.description).append('\n');
+            if (!metadata.description.isBlank()) context.append("Description/tags: ").append(metadata.description).append('\n');
         }
-        context.append("\nCOMPLETE RAW SOURCE TRANSCRIPT. IDs and timestamps are authoritative; wording may contain ASR errors.\n");
-        for (int i = 0; i < segments.size(); i++) {
-            TranscriptSegment s = segments.get(i);
-            context.append('[').append(i).append(" @ ")
-                    .append(s.startMs).append('-').append(s.endMs).append("ms] ")
-                    .append(s.text).append('\n');
+
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, String> representative = new LinkedHashMap<>();
+        for (TranscriptSegment segment : segments) {
+            String text = segment == null || segment.text == null ? "" : segment.text;
+            for (String token : text.replaceAll("[^\\p{L}\\p{N}'-]+", " ").trim().split("\\s+")) {
+                if (token.isBlank()) continue;
+                String key = token.toLowerCase(Locale.ROOT);
+                if (key.length() < 3 || CONTEXT_STOP_WORDS.contains(key)) continue;
+                counts.put(key, counts.getOrDefault(key, 0) + 1);
+                representative.putIfAbsent(key, token);
+            }
         }
+
+        context.append("Recurring/unusual raw transcript terms (may themselves contain ASR errors): ");
+        int written = 0;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            String raw = representative.get(entry.getKey());
+            int count = entry.getValue();
+            boolean unusual = count >= 2 || containsDigit(raw) || isUpperAcronym(raw);
+            if (!unusual) continue;
+            if (written > 0) context.append(", ");
+            context.append(raw).append('×').append(count);
+            if (++written >= MAX_RECURRING_TERMS) break;
+        }
+        if (written == 0) context.append("none identified");
+        context.append(".\n");
         return context.toString();
     }
 
-    private static JSONObject buildRequest(String fullContext,
+    private static JSONObject buildRequest(String globalContext,
+                                           List<TranscriptSegment> segments,
                                            int start,
                                            int end,
                                            String targetLang) throws Exception {
-        boolean spanish = targetLang != null && targetLang.toLowerCase().startsWith("es");
-        StringBuilder prompt = new StringBuilder(fullContext.length() + 6500);
-        prompt.append("You are translating a complete timed YouTube transcript for an isochronous dubbed audio track and bilingual study subtitles. ");
+        boolean spanish = targetLang != null && targetLang.toLowerCase(Locale.ROOT).startsWith("es");
+        StringBuilder prompt = new StringBuilder(globalContext.length() + 8_000);
+        prompt.append("You are translating timed YouTube speech for an isochronous dubbed track and bilingual study subtitles. ");
         if (spanish) {
             prompt.append("Translate into natural conversational neutral Latin American Spanish. ");
         } else {
             prompt.append("Translate naturally for spoken dubbing into language code ")
                     .append(targetLang).append(". ");
         }
-        prompt.append("First use the VIDEO / SUBJECT CONTEXT and the COMPLETE transcript to infer the video's domain, recurring entities, names, products, games, characters, technical vocabulary, slang, abbreviations, memes and jargon. ")
-                .append("Treat the raw transcript as ASR that can contain homophones, bad spacing, wrong capitalization, phonetic spellings, or niche terms that a generic recognizer misunderstood. Resolve a suspicious token from global context only when evidence is strong: metadata, repeated transcript usage, nearby meaning, and well-known domain terminology should agree. For example, in a clearly Apex Legends weapon discussion, a raw token like 'DVO' may actually mean 'Devo' or 'Devotion' if the surrounding evidence strongly supports that reading. Do NOT guess merely because a correction is possible. ")
-                .append("Each ID is one immutable semantic subtitle event. Never move meaning between IDs. ")
-                .append("CRITICAL RAW-SOURCE RULE: copy the requested ID's raw English caption VERBATIM into source, even when you believe it contains an ASR error. This field is an integrity checksum. ")
-                .append("CORRECTION RULE: correctedSource is the English text a careful human caption editor would display. Leave it IDENTICAL to source unless there is high-confidence contextual evidence of an actual transcription/parsing error. Correct proper nouns, jargon, acronyms, homophones, spacing, capitalization or punctuation; do not paraphrase, polish style, censor slang, or rewrite ordinary speech. ")
-                .append("TRANSLATION RULE: translate the intended meaning represented by correctedSource, while still translating ONLY this ID. Do not borrow, anticipate, postpone, merge or redistribute meaning from neighboring IDs. ")
-                .append("The translation must be a complete semantic counterpart so a learner can pause on one event and compare the two languages directly. ")
-                .append("ISOCHRONY RULE: prefer the shortest natural wording that preserves the full meaning. Avoid filler, redundant pronouns, unnecessary discourse markers and wordy literal constructions so speech can finish inside the source timestamp. ")
-                .append("SUBTITLE RULE: prefer compact natural clauses, but never omit required meaning just to hit a width target. The renderer can wrap unusually long natural phrases. ")
-                .append("Return exactly one object for every requested ID. Object fields are id, source, correctedSource, and translation. Response order does not matter because IDs are authoritative.\n\n")
-                .append(fullContext)
-                .append("\nOUTPUT ONLY IDS ").append(start).append(" THROUGH ").append(end - 1).append(".\n");
+        prompt.append("Use VIDEO / SUBJECT CONTEXT only to disambiguate what the speaker meant; it is NOT permission to add facts. ")
+                .append("The raw captions are ASR and can contain homophones, bad spacing, wrong capitalization, phonetic spellings, niche jargon or slang. Correct a suspicious token only when metadata, repeated usage and nearby meaning give strong evidence. If uncertain, preserve the raw wording rather than inventing a correction. ")
+                .append("GROUNDING RULE: every factual/content element in translation must be licensed by that ID's correctedSource. Never add an explanation, name, weapon, item, location, number, cause, conclusion or joke merely because it appears elsewhere in the video context. ")
+                .append("Each ID is immutable. Never borrow, anticipate, postpone, merge or redistribute meaning across IDs. ")
+                .append("RAW-SOURCE CHECKSUM RULE: copy each requested ID's raw English caption VERBATIM into source. ")
+                .append("CORRECTION RULE: correctedSource is the English text a careful human caption editor would display. Leave it IDENTICAL to source unless there is high-confidence evidence of an actual ASR/parsing error. Correct terminology/proper nouns/spacing/punctuation; do not paraphrase ordinary speech. ")
+                .append("SPANISH ORTHOGRAPHY RULE: use ordinary spaces between every Spanish word. Never concatenate multiple words into one long token. ")
+                .append("ISOCHRONY RULE: prefer concise natural wording that preserves complete meaning so speech can fit its source time slot. ")
+                .append("Return exactly one object per requested ID with id, source, correctedSource and translation. Response order does not matter.\n\n")
+                .append(globalContext)
+                .append("\nLOCAL TRANSCRIPT WINDOW. Only requested IDs are translated; neighbors are context only.\n");
+
+        int localStart = Math.max(0, start - LOCAL_CONTEXT_RADIUS);
+        int localEnd = Math.min(segments.size(), end + LOCAL_CONTEXT_RADIUS);
+        for (int i = localStart; i < localEnd; i++) {
+            TranscriptSegment s = segments.get(i);
+            prompt.append('[').append(i).append(" @ ")
+                    .append(s.startMs).append('-').append(s.endMs).append("ms] ")
+                    .append(s.text).append('\n');
+        }
+        prompt.append("\nOUTPUT ONLY IDS ").append(start).append(" THROUGH ").append(end - 1).append(".\n");
 
         JSONObject itemProperties = new JSONObject()
                 .put("id", new JSONObject().put("type", "integer")
@@ -385,6 +515,27 @@ public final class GeminiTranslator {
         return new JSONObject()
                 .put("contents", new JSONArray().put(content))
                 .put("generationConfig", generationConfig);
+    }
+
+    private static boolean containsDigit(String value) {
+        if (value == null) return false;
+        for (int i = 0; i < value.length(); i++) {
+            if (Character.isDigit(value.charAt(i))) return true;
+        }
+        return false;
+    }
+
+    private static boolean isUpperAcronym(String value) {
+        if (value == null || value.length() < 3) return false;
+        int letters = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (Character.isLetter(c)) {
+                letters++;
+                if (!Character.isUpperCase(c)) return false;
+            }
+        }
+        return letters >= 3;
     }
 
     private static String readAll(InputStream in) throws Exception {
@@ -428,11 +579,11 @@ public final class GeminiTranslator {
 
     private static final class PreparedTranscript {
         final List<TranscriptSegment> segments;
-        final String fullContext;
+        final String globalContext;
 
-        PreparedTranscript(List<TranscriptSegment> segments, String fullContext) {
+        PreparedTranscript(List<TranscriptSegment> segments, String globalContext) {
             this.segments = segments;
-            this.fullContext = fullContext;
+            this.globalContext = globalContext;
         }
     }
 }
