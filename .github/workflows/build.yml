@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.3.2 patch bundle
+name: Build Spanish Dub Study v2.3.3 patch bundle
 
 on:
   workflow_dispatch:
@@ -55,7 +55,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.3.2 overlay
+      - name: Apply Spanish study v2.3.3 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -77,7 +77,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.3.2 bundle
+      - name: Rebrand and package v2.3.3 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -86,8 +86,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.3.2.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.2\nDescription: Context-aware transcript reliability update. Gemini now receives YouTube title, creator/channel and a capped description from the same Innertube response already used to locate captions, plus the complete raw timed transcript. Its prompt explicitly infers domain vocabulary, names, slang, game/technical jargon and likely ASR mistakes before translating, while keeping the raw source as an immutable alignment checksum. A conservative correctedSource field can repair high-confidence English caption mistakes for display (for example niche item names) without changing source timing/IDs. Long/multi-sentence events are recursively split at genuine punctuation anywhere in the event, punctuation-free ASR uses real caption pauses more effectively, and unusually long natural subtitles wrap instead of clipping. Rejected untranslated-Spanish slots receive a one-line rescue translation before falling silent. Retains conservative source-expression matching, immutable source-ID translation alignment, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.2\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.3.3.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.3.3\nDescription: Grounded long-video translation reliability update. Gemini requests no longer resend the entire transcript for every progressive batch: each request uses bounded local transcript context plus YouTube title/channel/description/tags and a compact whole-video index of recurring unusual terms, preventing prompt growth and late-video quality degradation. Spanish output must use normal word spacing; giant concatenated words, extreme length changes, lost numeric anchors, untranslated English and neighboring-event leakage are rejected. Accepted Gemini Spanish is independently back-translated through the existing Google translator and conservatively checked against the intended English source; suspicious lines are rescued from the exact corrected/source event rather than being spoken or displayed as invented content. Gemini is explicitly prohibited from adding facts merely because they occur elsewhere in the video context. Retains contextual ASR correction, natural phrase segmentation, immutable source-ID/timing alignment, source-expression matching, portrait-responsive placement, live speech-rate changes, per-video autostart, persistent settings and vocabulary tools based on Morphe 1.41.0\nVersion: 2.3.3\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -102,7 +102,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.3.2
+          name: spanish-dub-study-patches-v2.3.3
           path: dist/
           if-no-files-found: error
           retention-days: 30
