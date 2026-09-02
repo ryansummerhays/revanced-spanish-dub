@@ -13,6 +13,7 @@ final class SpanishStudyPrefs {
             VOCAB_LIMIT="vocab_limit",
             INCLUDE_COMMON="include_common",
             SUBTITLE_WORDS="subtitle_words_per_chunk",
+            SUBTITLE_TEXT_SIZE="subtitle_text_size_sp",
             GEMINI_ENABLED="gemini_enabled",
             GEMINI_API_KEY="gemini_api_key",
             GEMINI_MODEL="gemini_model";
@@ -29,6 +30,8 @@ final class SpanishStudyPrefs {
     static void setShowSubtitles(Context c,boolean v){prefs(c).edit().putBoolean(SHOW_SUBS,v).apply();}
     static int subtitleWords(Context c){return Math.max(4,Math.min(12,prefs(c).getInt(SUBTITLE_WORDS,7)));}
     static void setSubtitleWords(Context c,int v){prefs(c).edit().putInt(SUBTITLE_WORDS,Math.max(4,Math.min(12,v))).apply();}
+    static int subtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(SUBTITLE_TEXT_SIZE,12)));}
+    static void setSubtitleTextSize(Context c,int v){prefs(c).edit().putInt(SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v))).apply();}
 
     static int vocabLimit(Context c){return Math.max(10,Math.min(100,prefs(c).getInt(VOCAB_LIMIT,40)));}
     static void setVocabLimit(Context c,int v){prefs(c).edit().putInt(VOCAB_LIMIT,Math.max(10,Math.min(100,v))).apply();}
