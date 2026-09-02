@@ -7,7 +7,6 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -61,15 +60,20 @@ final class SpanishStudySheet {
                 checked->SpanishStudyPrefs.setShowEnglishSubtitles(activity,checked)));
 
         content.addView(sliderRow(activity,fg,"Spanish text size","sp",8,18,
-                SpanishStudyPrefs.subtitleTextSize(activity),SpanishStudyPrefs::setSubtitleTextSize));
+                SpanishStudyPrefs.subtitleTextSize(activity),
+                value->SpanishStudyPrefs.setSubtitleTextSize(activity,value)));
         content.addView(sliderRow(activity,fg,"Spanish vertical position","dp from bottom",24,240,
-                SpanishStudyPrefs.spanishSubtitleBottom(activity),SpanishStudyPrefs::setSpanishSubtitleBottom));
+                SpanishStudyPrefs.spanishSubtitleBottom(activity),
+                value->SpanishStudyPrefs.setSpanishSubtitleBottom(activity,value)));
         content.addView(sliderRow(activity,fg,"English text size","sp",8,18,
-                SpanishStudyPrefs.englishSubtitleTextSize(activity),SpanishStudyPrefs::setEnglishSubtitleTextSize));
+                SpanishStudyPrefs.englishSubtitleTextSize(activity),
+                value->SpanishStudyPrefs.setEnglishSubtitleTextSize(activity,value)));
         content.addView(sliderRow(activity,fg,"English vertical position","dp from bottom",24,240,
-                SpanishStudyPrefs.englishSubtitleBottom(activity),SpanishStudyPrefs::setEnglishSubtitleBottom));
+                SpanishStudyPrefs.englishSubtitleBottom(activity),
+                value->SpanishStudyPrefs.setEnglishSubtitleBottom(activity,value)));
         content.addView(sliderRow(activity,fg,"Words shown at once","words",4,12,
-                SpanishStudyPrefs.subtitleWords(activity),SpanishStudyPrefs::setSubtitleWords));
+                SpanishStudyPrefs.subtitleWords(activity),
+                value->SpanishStudyPrefs.setSubtitleWords(activity,value)));
 
         TextView captionNote=new TextView(activity);
         captionNote.setText("English uses the same YouTube caption transcript used for dubbing, so both languages can be sized and positioned independently. If YouTube's own CC is already on for the current video, turn CC off once to avoid a duplicate English line.");
@@ -105,7 +109,8 @@ final class SpanishStudySheet {
                 SpanishStudyPrefs.includeCommon(activity),
                 checked->SpanishStudyPrefs.setIncludeCommon(activity,checked)));
         content.addView(sliderRow(activity,fg,"Vocabulary list size","words",10,100,
-                SpanishStudyPrefs.vocabLimit(activity),SpanishStudyPrefs::setVocabLimit));
+                SpanishStudyPrefs.vocabLimit(activity),
+                value->SpanishStudyPrefs.setVocabLimit(activity,value)));
 
         final SheetBottomDialog.SlideDialog[] dialogRef={null};
         LinearLayout review=valueRow(activity,fg,"Review vocabulary","Open");
@@ -147,7 +152,7 @@ final class SpanishStudySheet {
         LinearLayout row=new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(Dim.dp56);
+        row.setMinimumHeight(Dim.dp48+Dim.dp8);
 
         LinearLayout textBox=new LinearLayout(activity);
         textBox.setOrientation(LinearLayout.VERTICAL);
