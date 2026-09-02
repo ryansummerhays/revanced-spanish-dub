@@ -10,10 +10,14 @@ final class SpanishStudyPrefs {
     private static final String PREFS="spanish_study_vot",
             KNOWN="known_words",
             SHOW_SUBS="show_translated_subtitles",
+            SHOW_ENGLISH_SUBS="show_english_subtitles",
             VOCAB_LIMIT="vocab_limit",
             INCLUDE_COMMON="include_common",
             SUBTITLE_WORDS="subtitle_words_per_chunk",
             SUBTITLE_TEXT_SIZE="subtitle_text_size_sp",
+            ENGLISH_SUBTITLE_TEXT_SIZE="english_subtitle_text_size_sp",
+            SPANISH_SUBTITLE_BOTTOM="spanish_subtitle_bottom_dp",
+            ENGLISH_SUBTITLE_BOTTOM="english_subtitle_bottom_dp",
             GEMINI_ENABLED="gemini_enabled",
             GEMINI_API_KEY="gemini_api_key",
             GEMINI_MODEL="gemini_model";
@@ -28,10 +32,19 @@ final class SpanishStudyPrefs {
 
     static boolean showSubtitles(Context c){return prefs(c).getBoolean(SHOW_SUBS,true);}
     static void setShowSubtitles(Context c,boolean v){prefs(c).edit().putBoolean(SHOW_SUBS,v).apply();}
+    static boolean showEnglishSubtitles(Context c){return prefs(c).getBoolean(SHOW_ENGLISH_SUBS,false);}
+    static void setShowEnglishSubtitles(Context c,boolean v){prefs(c).edit().putBoolean(SHOW_ENGLISH_SUBS,v).apply();}
+
     static int subtitleWords(Context c){return Math.max(4,Math.min(12,prefs(c).getInt(SUBTITLE_WORDS,7)));}
     static void setSubtitleWords(Context c,int v){prefs(c).edit().putInt(SUBTITLE_WORDS,Math.max(4,Math.min(12,v))).apply();}
     static int subtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(SUBTITLE_TEXT_SIZE,12)));}
     static void setSubtitleTextSize(Context c,int v){prefs(c).edit().putInt(SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v))).apply();}
+    static int englishSubtitleTextSize(Context c){return Math.max(8,Math.min(18,prefs(c).getInt(ENGLISH_SUBTITLE_TEXT_SIZE,11)));}
+    static void setEnglishSubtitleTextSize(Context c,int v){prefs(c).edit().putInt(ENGLISH_SUBTITLE_TEXT_SIZE,Math.max(8,Math.min(18,v))).apply();}
+    static int spanishSubtitleBottom(Context c){return Math.max(24,Math.min(240,prefs(c).getInt(SPANISH_SUBTITLE_BOTTOM,72)));}
+    static void setSpanishSubtitleBottom(Context c,int v){prefs(c).edit().putInt(SPANISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v))).apply();}
+    static int englishSubtitleBottom(Context c){return Math.max(24,Math.min(240,prefs(c).getInt(ENGLISH_SUBTITLE_BOTTOM,118)));}
+    static void setEnglishSubtitleBottom(Context c,int v){prefs(c).edit().putInt(ENGLISH_SUBTITLE_BOTTOM,Math.max(24,Math.min(240,v))).apply();}
 
     static int vocabLimit(Context c){return Math.max(10,Math.min(100,prefs(c).getInt(VOCAB_LIMIT,40)));}
     static void setVocabLimit(Context c,int v){prefs(c).edit().putInt(VOCAB_LIMIT,Math.max(10,Math.min(100,v))).apply();}
