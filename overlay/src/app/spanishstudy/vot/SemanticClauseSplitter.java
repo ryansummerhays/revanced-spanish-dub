@@ -7,14 +7,16 @@ import java.util.List;
  * Splits source subtitle text into short, meaning-preserving clauses.
  *
  * The goal is not word-count equality between languages. Instead, each source slot should contain
- * one compact sentence/clause that can be translated 1:1. The bilingual overlay can then show the
- * complete English source clause and its complete Spanish translation at the exact same time.
+ * one compact sentence/clause that can be translated 1:1 and normally fit on one subtitle line in
+ * both languages. Short sentences stay whole; longer sentences split at natural clause boundaries.
  */
 public final class SemanticClauseSplitter {
-    private static final int TARGET_CHARS = 78;
-    private static final int SOFT_MAX_CHARS = 88;
-    private static final int HARD_MAX_CHARS = 118;
-    private static final int MIN_CLAUSE_CHARS = 26;
+    // Tuned for one-line bilingual study subtitles. Spanish often expands relative to English, so
+    // keep the English source slot comfortably shorter than a normal two-line caption.
+    private static final int TARGET_CHARS = 46;
+    private static final int SOFT_MAX_CHARS = 54;
+    private static final int HARD_MAX_CHARS = 68;
+    private static final int MIN_CLAUSE_CHARS = 16;
 
     private static final String[] CONJUNCTIONS = {
             " and ", " but ", " because ", " so ", " while ", " although ", " though ",
