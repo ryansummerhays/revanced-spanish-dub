@@ -6,6 +6,8 @@ public final class SemanticClauseSplitterTest {
     public static void main(String[] args) {
         shortSentenceStaysWhole();
         longSentencePrefersPunctuationPause();
+        distantSentenceBoundaryStillSplits();
+        multipleSentencesAreRecursivelySeparated();
         unpunctuatedThoughtDoesNotGetArbitrarilyChopped();
         conjunctionAloneDoesNotCreateTtsStop();
         reconstructionPreservesWords();
@@ -28,6 +30,22 @@ public final class SemanticClauseSplitterTest {
         for (String part : parts) {
             require(part.length() >= 12, "created tiny fragment: " + part);
         }
+    }
+
+    private static void distantSentenceBoundaryStillSplits() {
+        String s = "If you were in a boat directly over the Mariana Trench and dropped a seven kilogram bowling ball over the side, how long would it take to hit the bottom? It's a good thing you mentioned the mass.";
+        List<String> parts = SemanticClauseSplitter.split(s);
+        require(parts.size() >= 2, "terminal punctuation beyond the old search window must still split");
+        require(parts.get(parts.size() - 2).endsWith("?"),
+                "question boundary should remain a natural subtitle event");
+    }
+
+    private static void multipleSentencesAreRecursivelySeparated() {
+        String s = "This first sentence deliberately runs longer than the preferred subtitle width before it finally ends. This second sentence also has enough words to require its own event. The third sentence should not be glued onto either of them.";
+        List<String> parts = SemanticClauseSplitter.split(s);
+        require(parts.size() >= 3, "multiple complete sentences should become separate events");
+        require(parts.get(0).endsWith("."), "first sentence boundary lost");
+        require(parts.get(1).endsWith("."), "second sentence boundary lost");
     }
 
     private static void unpunctuatedThoughtDoesNotGetArbitrarilyChopped() {
