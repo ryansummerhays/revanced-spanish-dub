@@ -8,7 +8,8 @@ public final class SemanticClauseSplitterTest {
         longSentencePrefersClauseBoundary();
         hardLimitFallsBackToWordBoundary();
         reconstructionPreservesWords();
-        compactClausesStayNearOneLine();
+        normalClausesStayWithinOneLineCeiling();
+        targetRangeIsProfessionalOneLineRange();
         System.out.println("semantic clause splitter: OK");
     }
 
@@ -22,18 +23,20 @@ public final class SemanticClauseSplitterTest {
     private static void longSentencePrefersClauseBoundary() {
         String s = "I wanted to finish the project before dinner, but the last experiment took much longer than expected, so I stayed another hour to make sure the result was real.";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 2, "long sentence should split");
+        require(parts.size() >= 3, "long sentence should split into compact semantic units");
         for (String part : parts) {
-            require(part.length() >= 16, "created tiny fragment: " + part);
+            require(part.length() >= 10, "created tiny fragment: " + part);
         }
     }
 
     private static void hardLimitFallsBackToWordBoundary() {
         String s = "This is a deliberately long unpunctuated stretch of speech where the caption source gives us no commas or sentence marks and we still need a readable compact subtitle without chopping a word in half at an arbitrary character position";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 2, "hard-max fallback did not split");
+        require(parts.size() >= 4, "hard-max fallback did not split enough");
         for (String part : parts) {
             require(!part.startsWith(" ") && !part.endsWith(" "), "bad whitespace");
+            require(part.length() <= SemanticClauseSplitter.HARD_MAX_CHARS,
+                    "ordinary clause exceeded one-line ceiling: " + part);
         }
     }
 
@@ -44,13 +47,23 @@ public final class SemanticClauseSplitterTest {
         require(rebuilt.equals(s), "splitter changed source text: " + rebuilt);
     }
 
-    private static void compactClausesStayNearOneLine() {
+    private static void normalClausesStayWithinOneLineCeiling() {
         String s = "The speaker moves very quickly through this idea, but the translated voice needs enough room to finish without falling behind the next clause.";
         List<String> parts = SemanticClauseSplitter.split(s);
-        require(parts.size() >= 2, "expected compact clause split");
+        require(parts.size() >= 3, "expected compact clause split");
         for (String part : parts) {
-            require(part.length() <= 72, "clause is too wide for one-line target: " + part);
+            require(part.length() <= 42, "clause is too wide for normal one-line target: " + part);
         }
+    }
+
+    private static void targetRangeIsProfessionalOneLineRange() {
+        require(SemanticClauseSplitter.TARGET_CHARS >= 25
+                        && SemanticClauseSplitter.TARGET_CHARS <= 38,
+                "target should stay in the compact bilingual one-line range");
+        require(SemanticClauseSplitter.SOFT_MAX_CHARS <= 38,
+                "soft max should not exceed the preferred bilingual range");
+        require(SemanticClauseSplitter.HARD_MAX_CHARS == 42,
+                "normal Latin-script one-line ceiling should be 42 chars");
     }
 
     private static void require(boolean condition, String message) {
