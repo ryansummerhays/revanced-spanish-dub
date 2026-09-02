@@ -5,6 +5,8 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,11 +19,13 @@ import java.util.List;
 import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegment;
 
 /**
- * Displays one complete English source clause and its complete Spanish translation on one clock.
+ * Displays one compact English source clause and its complete Spanish translation on one clock.
  *
- * The source transcript is split into compact semantic clauses before translation. Each clause is
+ * The source transcript is split into short semantic clauses before translation. Each clause is
  * translated 1:1, receives one immutable source time slot, and both boxes change on that exact slot
  * boundary. Pausing therefore shows the complete meaning pair instead of proportional word slices.
+ * Both boxes are constrained to one line; on modern Android the text can shrink modestly when a
+ * translated clause is slightly wider than its source counterpart.
  *
  * Position preferences are authored in landscape/full-player coordinates. In portrait, the same
  * setting is mapped proportionally into YouTube's actual smaller player-controls rectangle instead
@@ -142,8 +146,9 @@ final class SpanishSubtitleOverlay {
         view.setTextColor(Color.WHITE);
         view.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         view.setGravity(Gravity.CENTER);
-        // Allow a third line so Spanish expansion does not silently clip part of the paired idea.
-        view.setMaxLines(3);
+        view.setSingleLine(true);
+        view.setMaxLines(1);
+        view.setHorizontallyScrolling(false);
         view.setPadding(dp(a, 8), dp(a, 4), dp(a, 8), dp(a, 4));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0xB8000000);
@@ -165,10 +170,20 @@ final class SpanishSubtitleOverlay {
     }
 
     private static void updateLayout(Activity a) {
-        spanishView.setTextSize(SpanishStudyPrefs.subtitleTextSize(a));
-        englishView.setTextSize(SpanishStudyPrefs.englishSubtitleTextSize(a));
+        updateTextSize(spanishView, SpanishStudyPrefs.subtitleTextSize(a));
+        updateTextSize(englishView, SpanishStudyPrefs.englishSubtitleTextSize(a));
         updateBottomMargin(a, spanishView, SpanishStudyPrefs.spanishSubtitleBottom(a));
         updateBottomMargin(a, englishView, SpanishStudyPrefs.englishSubtitleBottom(a));
+    }
+
+    private static void updateTextSize(TextView view, int preferredSp) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            int minSp = Math.max(7, preferredSp - 4);
+            view.setAutoSizeTextTypeUniformWithConfiguration(
+                    minSp, Math.max(minSp, preferredSp), 1, TypedValue.COMPLEX_UNIT_SP);
+        } else {
+            view.setTextSize(TypedValue.COMPLEX_UNIT_SP, preferredSp);
+        }
     }
 
     private static void updateBottomMargin(Activity a, TextView view, int bottomDp) {
