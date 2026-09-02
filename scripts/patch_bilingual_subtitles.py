@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wire English source captions into the study overlay and suppress duplicate auto-CC."""
+"""Wire paired semantic English/Spanish subtitles into Morphe and suppress duplicate auto-CC."""
 from __future__ import annotations
 
 import sys
@@ -30,9 +30,75 @@ def main() -> None:
     replace_once(
         fetcher,
         "import app.morphe.extension.shared.Utils;\n",
-        "import app.morphe.extension.shared.Utils;\nimport app.spanishstudy.vot.SpanishStudyController;\n",
-        "TranscriptFetcher study import",
+        "import app.morphe.extension.shared.Utils;\nimport app.spanishstudy.vot.SemanticClauseSplitter;\nimport app.spanishstudy.vot.SpanishStudyController;\n",
+        "TranscriptFetcher study imports",
     )
+
+    # First create short semantic source slots. Translation receives this exact same list, so every
+    # English clause has one Spanish counterpart with the same immutable start/end timestamps.
+    replace_once(
+        fetcher,
+        "        return mergeIntoSentences(lines);\n",
+        "        return splitIntoStudyClauses(mergeIntoSentences(lines));\n",
+        "split merged source transcript into semantic clauses",
+    )
+
+    clause_method = r'''
+    /**
+     * Converts sentence-sized source segments into compact semantic clause slots for bilingual
+     * study. Timing is derived only from the English/source slot and is shared 1:1 by translation.
+     * We do not split when the source slot is too short to give every clause a readable duration.
+     */
+    private static List<TranscriptSegment> splitIntoStudyClauses(List<TranscriptSegment> sentences) {
+        final long MIN_CLAUSE_SLOT_MS = 900;
+        List<TranscriptSegment> out = new ArrayList<>();
+        for (TranscriptSegment sentence : sentences) {
+            List<String> pieces = SemanticClauseSplitter.split(sentence.text);
+            if (pieces.size() <= 1) {
+                out.add(sentence);
+                continue;
+            }
+
+            final long span = Math.max(1L, sentence.endMs - sentence.startMs);
+            if (span < pieces.size() * MIN_CLAUSE_SLOT_MS) {
+                out.add(sentence);
+                continue;
+            }
+
+            int totalWeight = 0;
+            for (String piece : pieces) totalWeight += Math.max(1, piece.length());
+
+            long cursor = sentence.startMs;
+            int consumedWeight = 0;
+            for (int i = 0; i < pieces.size(); i++) {
+                String piece = pieces.get(i);
+                consumedWeight += Math.max(1, piece.length());
+                final int remaining = pieces.size() - i - 1;
+                long pieceEnd;
+                if (remaining == 0) {
+                    pieceEnd = sentence.endMs;
+                } else {
+                    pieceEnd = sentence.startMs + Math.round(span
+                            * (consumedWeight / (double) totalWeight));
+                    final long minEnd = cursor + MIN_CLAUSE_SLOT_MS;
+                    final long maxEnd = sentence.endMs - remaining * MIN_CLAUSE_SLOT_MS;
+                    pieceEnd = Math.max(minEnd, Math.min(maxEnd, pieceEnd));
+                }
+                out.add(new TranscriptSegment(cursor, pieceEnd, piece, sentence.lang));
+                cursor = pieceEnd;
+            }
+        }
+        return out;
+    }
+
+'''
+    replace_once(
+        fetcher,
+        "    private static boolean detectPunctuation(List<TranscriptSegment> lines) {\n",
+        clause_method + "    private static boolean detectPunctuation(List<TranscriptSegment> lines) {\n",
+        "add semantic clause timing mapper",
+    )
+
     replace_once(
         fetcher,
         "        List<TranscriptSegment> segments = fetchEnglishSegments(videoId);\n",
@@ -60,7 +126,7 @@ def main() -> None:
         "suppress duplicate YouTube auto captions",
     )
 
-    print("Bilingual subtitle integration complete")
+    print("Paired semantic bilingual subtitle integration complete")
 
 
 if __name__ == "__main__":
