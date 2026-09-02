@@ -59,6 +59,7 @@ jobs:
           python3 scripts/patch_autostart_session.py upstream
           python3 scripts/patch_live_speech_rate.py upstream
           python3 scripts/patch_hard_sync_deadline.py upstream
+          python3 scripts/patch_translation_language_guard.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -78,7 +79,7 @@ jobs:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
           dst = 'dist/spanish-dub-study-patches-v2.2.6.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.6\nDescription: Standards-based bilingual subtitles plus alignment-integrity enforcement: Gemini translations are keyed to immutable source event IDs, must echo the exact English source line, are reassembled by ID instead of array position, reject obvious neighboring-event token leakage, and use smaller progressive batches; includes one-line Spanish-over-English semantic pairs, hard source-timeline dub sync, portrait-responsive placement, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.6\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.2.6\nDescription: Standards-based bilingual subtitles with alignment-integrity enforcement: Gemini translations are keyed to immutable source event IDs, must echo the exact English source line, are reassembled by ID instead of array position, reject obvious neighboring-event token leakage, use smaller progressive batches, and reject clearly English/untranslated text before it can be tagged or spoken as Spanish; includes one-line Spanish-over-English semantic pairs, hard source-timeline dub sync, portrait-responsive placement, per-video autostart, persistent settings, and vocabulary tools based on Morphe 1.41.0\nVersion: 2.2.6\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
