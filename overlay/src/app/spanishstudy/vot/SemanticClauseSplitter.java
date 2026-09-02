@@ -4,26 +4,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Splits source subtitle text into short, meaning-preserving clauses.
+ * Splits source subtitle text into natural spoken phrase units.
  *
- * Policy for the bilingual study overlay:
- * - keep a complete short sentence when it already fits one line;
- * - otherwise prefer punctuation/clause boundaries over arbitrary word counts;
- * - aim for roughly 25-38 characters and treat ~42 characters as the normal one-line ceiling;
- * - preserve every source word and never split inside a word.
- *
- * The English/source segmentation is authoritative. Gemini then translates every source unit 1:1,
- * so Spanish and English always represent the same semantic unit on the same video timestamp.
+ * This deliberately does NOT cut at an arbitrary character/word boundary just to make a line
+ * shorter. A slightly long one-line subtitle is preferable to making the dub voice stop halfway
+ * through a syntactic thought. The preferred boundaries mirror places a human speaker would
+ * naturally pause: sentence punctuation first, then semicolon/colon/dash/comma, and only for very
+ * long unpunctuated stretches a small set of strong clause conjunctions.
  */
 public final class SemanticClauseSplitter {
-    public static final int TARGET_CHARS = 32;
-    public static final int SOFT_MAX_CHARS = 38;
-    public static final int HARD_MAX_CHARS = 42;
-    private static final int MIN_CLAUSE_CHARS = 10;
+    public static final int TARGET_CHARS = 42;
+    public static final int SOFT_MAX_CHARS = 48;
+    public static final int NATURAL_BOUNDARY_SEARCH_MAX = 72;
+    private static final int MIN_PHRASE_CHARS = 12;
 
-    private static final String[] CONJUNCTIONS = {
-            " and ", " but ", " because ", " so ", " while ", " although ", " though ",
-            " when ", " if ", " which ", " who ", " that ", " then ", " yet "
+    private static final String[] STRONG_CONJUNCTIONS = {
+            " but ", " because ", " so ", " although ", " though ", " yet ", " while "
     };
 
     private SemanticClauseSplitter() {}
@@ -35,16 +31,18 @@ public final class SemanticClauseSplitter {
 
         String remaining = text;
         while (remaining.length() > SOFT_MAX_CHARS) {
-            int cut = findSemanticCut(remaining);
-            if (cut <= 0 || cut >= remaining.length()) {
-                if (remaining.length() <= HARD_MAX_CHARS) break;
-                cut = nearestSpace(remaining, TARGET_CHARS, HARD_MAX_CHARS);
+            int cut = findNaturalPunctuationCut(remaining);
+            if (cut < 0 && remaining.length() > NATURAL_BOUNDARY_SEARCH_MAX) {
+                cut = findStrongConjunctionCut(remaining);
             }
+
+            // No natural pause exists in a sensible window. Keep the phrase whole rather than
+            // creating the audible mid-thought stop that arbitrary character/word chunking causes.
             if (cut <= 0 || cut >= remaining.length()) break;
 
             String head = remaining.substring(0, cut).trim();
             String tail = remaining.substring(cut).trim();
-            if (head.length() < MIN_CLAUSE_CHARS || tail.length() < MIN_CLAUSE_CHARS) break;
+            if (head.length() < MIN_PHRASE_CHARS || tail.length() < MIN_PHRASE_CHARS) break;
             out.add(head);
             remaining = tail;
         }
@@ -53,66 +51,79 @@ public final class SemanticClauseSplitter {
         return out;
     }
 
-    private static int findSemanticCut(String text) {
-        int max = Math.min(HARD_MAX_CHARS, text.length() - MIN_CLAUSE_CHARS);
-        int min = MIN_CLAUSE_CHARS;
-        if (max <= min) return -1;
+    private static int findNaturalPunctuationCut(String text) {
+        int max = Math.min(NATURAL_BOUNDARY_SEARCH_MAX,
+                text.length() - MIN_PHRASE_CHARS);
+        if (max <= MIN_PHRASE_CHARS) return -1;
 
         int best = -1;
         int bestScore = Integer.MIN_VALUE;
-
-        for (int i = min; i <= max; i++) {
+        for (int i = MIN_PHRASE_CHARS; i <= max; i++) {
             char c = text.charAt(i - 1);
-            int semantic = 0;
-            if (c == '.' || c == '?' || c == '!') semantic = 120;
-            else if (c == ';' || c == ':') semantic = 105;
-            else if (c == ',' || c == '—' || c == '–') semantic = 90;
-            if (semantic > 0 && isSafeTail(text, i)) {
-                int score = semantic - Math.abs(i - TARGET_CHARS);
-                if (score > bestScore) {
-                    bestScore = score;
-                    best = i;
-                }
+            int semantic;
+            if (c == '.' || c == '?' || c == '!' || c == '…') semantic = 150;
+            else if (c == ';' || c == ':') semantic = 135;
+            else if (c == '—' || c == '–') semantic = 125;
+            else if (c == ',') semantic = 112;
+            else continue;
+
+            if (!isSafeTail(text, i)) continue;
+            int score = semantic - Math.abs(i - TARGET_CHARS);
+            if (score > bestScore) {
+                bestScore = score;
+                best = i;
             }
         }
+        return best;
+    }
 
+    private static int findStrongConjunctionCut(String text) {
         String lower = text.toLowerCase();
-        for (String conjunction : CONJUNCTIONS) {
-            int from = Math.max(0, min - conjunction.length());
+        int max = Math.min(NATURAL_BOUNDARY_SEARCH_MAX,
+                text.length() - MIN_PHRASE_CHARS);
+        int best = -1;
+        int bestScore = Integer.MIN_VALUE;
+
+        for (String conjunction : STRONG_CONJUNCTIONS) {
+            int from = MIN_PHRASE_CHARS;
             while (true) {
                 int at = lower.indexOf(conjunction, from);
                 if (at < 0 || at > max) break;
-                int cut = at;
-                if (cut >= min && cut <= max && isSafeTail(text, cut)) {
-                    int score = 68 - Math.abs(cut - TARGET_CHARS);
+                // Cut BEFORE the conjunction so the following phrase begins naturally with
+                // "but", "because", etc., exactly as a speaker would after a brief pause.
+                if (isSafeTail(text, at)) {
+                    int score = 80 - Math.abs(at - TARGET_CHARS);
                     if (score > bestScore) {
                         bestScore = score;
-                        best = cut;
+                        best = at;
                     }
                 }
                 from = at + conjunction.length();
             }
         }
 
+        // "and" is weak and occurs inside many noun/verb phrases. Use it only as a last-resort
+        // boundary for a genuinely long stretch with substantial material on both sides.
+        if (best < 0 && text.length() > 88) {
+            int from = 20;
+            while (true) {
+                int at = lower.indexOf(" and ", from);
+                if (at < 0 || at > max) break;
+                if (at >= 20 && text.length() - at >= 20) {
+                    int score = 55 - Math.abs(at - TARGET_CHARS);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = at;
+                    }
+                }
+                from = at + 5;
+            }
+        }
         return best;
     }
 
     private static boolean isSafeTail(String text, int cut) {
-        return cut >= MIN_CLAUSE_CHARS && text.length() - cut >= MIN_CLAUSE_CHARS;
-    }
-
-    private static int nearestSpace(String text, int target, int hardMax) {
-        int max = Math.min(hardMax, text.length() - MIN_CLAUSE_CHARS);
-        if (max <= MIN_CLAUSE_CHARS) return -1;
-        target = Math.max(MIN_CLAUSE_CHARS, Math.min(target, max));
-
-        for (int delta = 0; delta <= max; delta++) {
-            int left = target - delta;
-            if (left >= MIN_CLAUSE_CHARS && Character.isWhitespace(text.charAt(left))) return left;
-            int right = target + delta;
-            if (right <= max && Character.isWhitespace(text.charAt(right))) return right;
-        }
-        return -1;
+        return cut >= MIN_PHRASE_CHARS && text.length() - cut >= MIN_PHRASE_CHARS;
     }
 
     private static String normalize(String raw) {
