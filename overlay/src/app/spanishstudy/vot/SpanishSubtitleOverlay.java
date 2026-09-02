@@ -17,119 +17,211 @@ import java.util.regex.Pattern;
 
 import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegment;
 
-/** Displays small rolling chunks from the exact Spanish string sent to TTS. */
+/** Displays independently configurable Spanish dub and English source subtitles. */
 final class SpanishSubtitleOverlay {
     private static final Pattern TOKEN = Pattern.compile("\\S+");
     private static Activity activity;
-    private static TextView textView;
-    private static List<TranscriptSegment> segments=new ArrayList<>();
-    private static int cursor;
+    private static TextView spanishView;
+    private static TextView englishView;
+    private static List<TranscriptSegment> spanishSegments=new ArrayList<>();
+    private static List<TranscriptSegment> englishSegments=new ArrayList<>();
+    private static int spanishCursor;
+    private static int englishCursor;
 
     private SpanishSubtitleOverlay(){}
 
     static void setSegments(List<TranscriptSegment> snapshot){
-        segments=snapshot==null?new ArrayList<>():new ArrayList<>(snapshot);
-        cursor=0;
+        spanishSegments=snapshot==null?new ArrayList<>():new ArrayList<>(snapshot);
+        spanishCursor=0;
+    }
+
+    static void setSourceSegments(List<TranscriptSegment> snapshot){
+        englishSegments=snapshot==null?new ArrayList<>():new ArrayList<>(snapshot);
+        englishCursor=0;
     }
 
     static void update(Activity a,long timeMs){
         if(a==null||a.isFinishing()||a.isDestroyed())return;
-        if(!SpanishStudyPrefs.showSubtitles(a)){hide();return;}
         ensureAttached(a);
-        textView.setTextSize(SpanishStudyPrefs.subtitleTextSize(a));
-        TranscriptSegment active=find(timeMs);
+        updateLayout(a);
+        updateSpanish(a,timeMs);
+        updateEnglish(a,timeMs);
+    }
+
+    private static void updateSpanish(Activity a,long timeMs){
+        if(!SpanishStudyPrefs.showSubtitles(a)){
+            spanishView.setVisibility(View.GONE);
+            return;
+        }
+        TranscriptSegment active=findSpanish(timeMs);
         if(active==null||active.text==null||active.text.isBlank()){
-            textView.setVisibility(View.GONE);
+            spanishView.setVisibility(View.GONE);
             return;
         }
         String lang=active.lang==null?"":active.lang.toLowerCase();
         if(!lang.startsWith("es")){
-            textView.setVisibility(View.GONE);
+            spanishView.setVisibility(View.GONE);
             return;
         }
-        String chunk=rollingChunk(a,active,timeMs);
+        String chunk=rollingChunk(a,active,timeMs,true);
         if(chunk.isBlank()){
-            textView.setVisibility(View.GONE);
+            spanishView.setVisibility(View.GONE);
             return;
         }
-        if(!chunk.contentEquals(textView.getText()))textView.setText(chunk);
-        textView.setVisibility(View.VISIBLE);
+        if(!chunk.contentEquals(spanishView.getText()))spanishView.setText(chunk);
+        spanishView.setVisibility(View.VISIBLE);
     }
 
-    static void hide(){if(textView!=null)textView.setVisibility(View.GONE);}
+    private static void updateEnglish(Activity a,long timeMs){
+        if(!SpanishStudyPrefs.showEnglishSubtitles(a)){
+            englishView.setVisibility(View.GONE);
+            return;
+        }
+        TranscriptSegment active=findEnglish(timeMs);
+        if(active==null||active.text==null||active.text.isBlank()){
+            englishView.setVisibility(View.GONE);
+            return;
+        }
+        String lang=active.lang==null?"":active.lang.toLowerCase();
+        if(!lang.startsWith("en")){
+            englishView.setVisibility(View.GONE);
+            return;
+        }
+        String chunk=rollingChunk(a,active,timeMs,false);
+        if(chunk.isBlank()){
+            englishView.setVisibility(View.GONE);
+            return;
+        }
+        if(!chunk.contentEquals(englishView.getText()))englishView.setText(chunk);
+        englishView.setVisibility(View.VISIBLE);
+    }
 
-    private static TranscriptSegment find(long timeMs){
-        List<TranscriptSegment> local=segments;
+    static void hide(){
+        if(spanishView!=null)spanishView.setVisibility(View.GONE);
+        if(englishView!=null)englishView.setVisibility(View.GONE);
+    }
+
+    private static TranscriptSegment findSpanish(long timeMs){
+        List<TranscriptSegment> local=spanishSegments;
         if(local.isEmpty())return null;
-        if(cursor>=local.size())cursor=local.size()-1;
-        while(cursor>0&&timeMs<local.get(cursor).playbackStartMs)cursor--;
-        while(cursor+1<local.size()&&timeMs>=local.get(cursor).playbackEndMs)cursor++;
-        TranscriptSegment s=local.get(cursor);
+        if(spanishCursor>=local.size())spanishCursor=local.size()-1;
+        while(spanishCursor>0&&timeMs<local.get(spanishCursor).playbackStartMs)spanishCursor--;
+        while(spanishCursor+1<local.size()&&timeMs>=local.get(spanishCursor).playbackEndMs)spanishCursor++;
+        TranscriptSegment s=local.get(spanishCursor);
         return timeMs>=s.playbackStartMs&&timeMs<s.playbackEndMs?s:null;
     }
 
-    private static String rollingChunk(Activity a,TranscriptSegment segment,long timeMs){
+    private static TranscriptSegment findEnglish(long timeMs){
+        List<TranscriptSegment> local=englishSegments;
+        if(local.isEmpty())return null;
+        if(englishCursor>=local.size())englishCursor=local.size()-1;
+        while(englishCursor>0&&timeMs<local.get(englishCursor).startMs)englishCursor--;
+        while(englishCursor+1<local.size()&&timeMs>=local.get(englishCursor).endMs)englishCursor++;
+        TranscriptSegment s=local.get(englishCursor);
+        return timeMs>=s.startMs&&timeMs<s.endMs?s:null;
+    }
+
+    private static String rollingChunk(Activity a,TranscriptSegment segment,long timeMs,boolean spanish){
         List<String> tokens=new ArrayList<>();
         Matcher matcher=TOKEN.matcher(segment.text);
         while(matcher.find())tokens.add(matcher.group());
         if(tokens.isEmpty())return "";
 
-        int tokenIndex=estimatedTokenIndex(segment,timeMs,tokens.size());
-        SpanishWordTimingStore.Snapshot timing=SpanishWordTimingStore.get(segment.text);
-        if(timing!=null&&timing.size()>0){
-            long relative=Math.max(0,timeMs-segment.playbackStartMs);
-            int boundaryIndex=0;
-            for(int i=0;i<timing.size();i++){
-                if(timing.startMs[i]<=relative)boundaryIndex=i;
-                else break;
+        long start=spanish?segment.playbackStartMs:segment.startMs;
+        long end=spanish?segment.playbackEndMs:segment.endMs;
+        int tokenIndex=estimatedTokenIndex(start,end,timeMs,tokens.size());
+
+        if(spanish){
+            SpanishWordTimingStore.Snapshot timing=SpanishWordTimingStore.get(segment.text);
+            if(timing!=null&&timing.size()>0){
+                long relative=Math.max(0,timeMs-segment.playbackStartMs);
+                int boundaryIndex=0;
+                for(int i=0;i<timing.size();i++){
+                    if(timing.startMs[i]<=relative)boundaryIndex=i;
+                    else break;
+                }
+                tokenIndex=Math.min(tokens.size()-1,
+                        (int)Math.floor(boundaryIndex*(tokens.size()/(double)Math.max(1,timing.size()))));
             }
-            tokenIndex=Math.min(tokens.size()-1,
-                    (int)Math.floor(boundaryIndex*(tokens.size()/(double)Math.max(1,timing.size()))));
         }
 
         int perChunk=SpanishStudyPrefs.subtitleWords(a);
-        int start=(tokenIndex/perChunk)*perChunk;
-        int end=Math.min(tokens.size(),start+perChunk);
+        int chunkStart=(tokenIndex/perChunk)*perChunk;
+        int chunkEnd=Math.min(tokens.size(),chunkStart+perChunk);
         StringBuilder out=new StringBuilder();
-        for(int i=start;i<end;i++){
+        for(int i=chunkStart;i<chunkEnd;i++){
             if(out.length()>0)out.append(' ');
             out.append(tokens.get(i));
         }
         return out.toString();
     }
 
-    private static int estimatedTokenIndex(TranscriptSegment segment,long timeMs,int tokenCount){
-        long span=Math.max(1,segment.playbackEndMs-segment.playbackStartMs);
-        double progress=Math.max(0,Math.min(0.999,(timeMs-segment.playbackStartMs)/(double)span));
+    private static int estimatedTokenIndex(long start,long end,long timeMs,int tokenCount){
+        long span=Math.max(1,end-start);
+        double progress=Math.max(0,Math.min(0.999,(timeMs-start)/(double)span));
         return Math.min(tokenCount-1,(int)Math.floor(progress*tokenCount));
     }
 
     private static void ensureAttached(Activity a){
-        if(textView!=null&&activity==a&&textView.getParent()!=null)return;
-        if(textView!=null&&textView.getParent() instanceof ViewGroup)
-            ((ViewGroup)textView.getParent()).removeView(textView);
+        if(spanishView!=null&&englishView!=null&&activity==a
+                &&spanishView.getParent()!=null&&englishView.getParent()!=null)return;
+        detach(spanishView);
+        detach(englishView);
         activity=a;
-        textView=new TextView(a);
-        textView.setTextColor(Color.WHITE);
-        textView.setTextSize(SpanishStudyPrefs.subtitleTextSize(a));
-        textView.setTypeface(Typeface.DEFAULT,Typeface.NORMAL);
-        textView.setGravity(Gravity.CENTER);
-        textView.setMaxLines(2);
-        int ph=dp(a,8),pv=dp(a,4);
-        textView.setPadding(ph,pv,ph,pv);
+        spanishView=createTextView(a);
+        englishView=createTextView(a);
+        addView(a,spanishView,SpanishStudyPrefs.spanishSubtitleBottom(a));
+        addView(a,englishView,SpanishStudyPrefs.englishSubtitleBottom(a));
+    }
+
+    private static TextView createTextView(Activity a){
+        TextView view=new TextView(a);
+        view.setTextColor(Color.WHITE);
+        view.setTypeface(Typeface.DEFAULT,Typeface.NORMAL);
+        view.setGravity(Gravity.CENTER);
+        view.setMaxLines(2);
+        view.setPadding(dp(a,8),dp(a,4),dp(a,8),dp(a,4));
         GradientDrawable bg=new GradientDrawable();
         bg.setColor(0xB8000000);
         bg.setCornerRadius(dp(a,6));
-        textView.setBackground(bg);
-        textView.setElevation(dp(a,6));
+        view.setBackground(bg);
+        view.setElevation(dp(a,6));
+        view.setVisibility(View.GONE);
+        return view;
+    }
+
+    private static void addView(Activity a,TextView view,int bottomDp){
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
         lp.leftMargin=dp(a,28);
         lp.rightMargin=dp(a,28);
-        lp.bottomMargin=dp(a,72);
-        a.addContentView(textView,lp);
-        textView.setVisibility(View.GONE);
+        lp.bottomMargin=dp(a,bottomDp);
+        a.addContentView(view,lp);
+    }
+
+    private static void updateLayout(Activity a){
+        spanishView.setTextSize(SpanishStudyPrefs.subtitleTextSize(a));
+        englishView.setTextSize(SpanishStudyPrefs.englishSubtitleTextSize(a));
+        updateBottomMargin(a,spanishView,SpanishStudyPrefs.spanishSubtitleBottom(a));
+        updateBottomMargin(a,englishView,SpanishStudyPrefs.englishSubtitleBottom(a));
+    }
+
+    private static void updateBottomMargin(Activity a,TextView view,int bottomDp){
+        ViewGroup.LayoutParams raw=view.getLayoutParams();
+        if(raw instanceof FrameLayout.LayoutParams){
+            FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)raw;
+            int wanted=dp(a,bottomDp);
+            if(lp.bottomMargin!=wanted){
+                lp.bottomMargin=wanted;
+                view.setLayoutParams(lp);
+            }
+        }
+    }
+
+    private static void detach(TextView view){
+        if(view!=null&&view.getParent() instanceof ViewGroup)
+            ((ViewGroup)view.getParent()).removeView(view);
     }
 
     private static int dp(Activity a,int v){
