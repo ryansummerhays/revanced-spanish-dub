@@ -36,6 +36,7 @@ final class SpanishSubtitleOverlay {
         if(a==null||a.isFinishing()||a.isDestroyed())return;
         if(!SpanishStudyPrefs.showSubtitles(a)){hide();return;}
         ensureAttached(a);
+        textView.setTextSize(SpanishStudyPrefs.subtitleTextSize(a));
         TranscriptSegment active=find(timeMs);
         if(active==null||active.text==null||active.text.isBlank()){
             textView.setVisibility(View.GONE);
@@ -82,8 +83,6 @@ final class SpanishSubtitleOverlay {
                 if(timing.startMs[i]<=relative)boundaryIndex=i;
                 else break;
             }
-            // Edge metadata counts spoken words. Scale to whitespace tokens so punctuation remains
-            // exactly as it appears in the master Spanish text rather than rebuilding subtitles.
             tokenIndex=Math.min(tokens.size()-1,
                     (int)Math.floor(boundaryIndex*(tokens.size()/(double)Math.max(1,timing.size()))));
         }
@@ -112,23 +111,23 @@ final class SpanishSubtitleOverlay {
         activity=a;
         textView=new TextView(a);
         textView.setTextColor(Color.WHITE);
-        textView.setTextSize(18);
-        textView.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        textView.setTextSize(SpanishStudyPrefs.subtitleTextSize(a));
+        textView.setTypeface(Typeface.DEFAULT,Typeface.NORMAL);
         textView.setGravity(Gravity.CENTER);
         textView.setMaxLines(2);
-        int ph=dp(a,12),pv=dp(a,7);
+        int ph=dp(a,8),pv=dp(a,4);
         textView.setPadding(ph,pv,ph,pv);
         GradientDrawable bg=new GradientDrawable();
-        bg.setColor(0xCC000000);
-        bg.setCornerRadius(dp(a,8));
+        bg.setColor(0xB8000000);
+        bg.setCornerRadius(dp(a,6));
         textView.setBackground(bg);
-        textView.setElevation(dp(a,8));
+        textView.setElevation(dp(a,6));
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
-        lp.leftMargin=dp(a,20);
-        lp.rightMargin=dp(a,20);
-        lp.bottomMargin=dp(a,92);
+        lp.leftMargin=dp(a,28);
+        lp.rightMargin=dp(a,28);
+        lp.bottomMargin=dp(a,72);
         a.addContentView(textView,lp);
         textView.setVisibility(View.GONE);
     }
