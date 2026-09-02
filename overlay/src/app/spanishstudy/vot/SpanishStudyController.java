@@ -3,7 +3,6 @@ package app.spanishstudy.vot;
 import android.app.*;
 import android.os.*;
 import android.text.InputType;
-import android.view.ViewGroup;
 import android.widget.*;
 import java.util.*;
 import app.morphe.extension.shared.Utils;
@@ -22,6 +21,12 @@ public final class SpanishStudyController {
         SpanishSubtitleOverlay.setSegments(latest);
     }
 
+    public static void onSourceTranscriptFetched(List<TranscriptSegment> segments){
+        final List<TranscriptSegment> snapshot=segments==null?new ArrayList<>():new ArrayList<>(segments);
+        if(Looper.myLooper()==Looper.getMainLooper())SpanishSubtitleOverlay.setSourceSegments(snapshot);
+        else MAIN.post(()->SpanishSubtitleOverlay.setSourceSegments(snapshot));
+    }
+
     public static void onVideoTimeChanged(long timeMs){
         Activity activity=Utils.getActivity();
         SpanishSubtitleOverlay.update(activity,timeMs);
@@ -30,6 +35,7 @@ public final class SpanishStudyController {
     public static void onVideoCleared(){
         latest=new ArrayList<>();
         SpanishSubtitleOverlay.setSegments(latest);
+        SpanishSubtitleOverlay.setSourceSegments(new ArrayList<>());
         SpanishSubtitleOverlay.hide();
         SpanishWordTimingStore.clear();
     }
@@ -50,6 +56,12 @@ public final class SpanishStudyController {
 
     public static void configureGemini(Activity activity){showGeminiSetup(activity);}
 
+    public static boolean suppressNativeCaptions(){
+        Activity activity=Utils.getActivity();
+        return activity!=null&&VoiceOverTranslationPatch.isSessionEnabled()
+                &&(SpanishStudyPrefs.showSubtitles(activity)||SpanishStudyPrefs.showEnglishSubtitles(activity));
+    }
+
     /** Called by the Edge TTS engine immediately before a fresh synthesis of this exact text. */
     public static void beginWordTimings(String text){SpanishWordTimingStore.begin(text);}
 
@@ -60,94 +72,7 @@ public final class SpanishStudyController {
 
     public static void showTools(Activity activity){
         if(activity==null||activity.isFinishing())return;
-        LinearLayout layout=new LinearLayout(activity);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        int pad=Math.round(16*activity.getResources().getDisplayMetrics().density);
-        layout.setPadding(pad,pad/2,pad,0);
-
-        CheckBox subtitles=new CheckBox(activity);
-        subtitles.setText("Show matching Spanish subtitles");
-        subtitles.setChecked(SpanishStudyPrefs.showSubtitles(activity));
-        subtitles.setOnCheckedChangeListener((v,c)->{
-            SpanishStudyPrefs.setShowSubtitles(activity,c);
-            if(!c)SpanishSubtitleOverlay.hide();
-        });
-        layout.addView(subtitles);
-
-        TextView sizeLabel=new TextView(activity);
-        sizeLabel.setText("Subtitle text size (sp)");
-        layout.addView(sizeLabel);
-        NumberPicker textSize=new NumberPicker(activity);
-        textSize.setMinValue(8);
-        textSize.setMaxValue(18);
-        textSize.setValue(SpanishStudyPrefs.subtitleTextSize(activity));
-        textSize.setWrapSelectorWheel(false);
-        textSize.setOnValueChangedListener((p,o,n)->SpanishStudyPrefs.setSubtitleTextSize(activity,n));
-        layout.addView(textSize,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView chunkLabel=new TextView(activity);
-        chunkLabel.setText("Subtitle words per chunk");
-        layout.addView(chunkLabel);
-        NumberPicker chunkSize=new NumberPicker(activity);
-        chunkSize.setMinValue(4);
-        chunkSize.setMaxValue(12);
-        chunkSize.setValue(SpanishStudyPrefs.subtitleWords(activity));
-        chunkSize.setWrapSelectorWheel(false);
-        chunkSize.setOnValueChangedListener((p,o,n)->SpanishStudyPrefs.setSubtitleWords(activity,n));
-        layout.addView(chunkSize,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        CheckBox gemini=new CheckBox(activity);
-        gemini.setText("Use Gemini contextual translation");
-        gemini.setChecked(SpanishStudyPrefs.geminiEnabled(activity));
-        gemini.setOnCheckedChangeListener((v,c)->{
-            if(c&&SpanishStudyPrefs.geminiApiKey(activity).trim().isEmpty()){
-                v.setChecked(false);
-                Toast.makeText(activity,"Configure a Gemini API key first",Toast.LENGTH_SHORT).show();
-                showGeminiSetup(activity);
-                return;
-            }
-            SpanishStudyPrefs.setGeminiEnabled(activity,c);
-            Toast.makeText(activity,c?"Gemini will be used on the next transcript reload":"Using Morphe translation provider",Toast.LENGTH_SHORT).show();
-        });
-        layout.addView(gemini);
-
-        Button geminiSetup=new Button(activity);
-        geminiSetup.setText("Configure Gemini");
-        geminiSetup.setOnClickListener(v->showGeminiSetup(activity));
-        layout.addView(geminiSetup);
-
-        TextView geminiStatus=new TextView(activity);
-        String keyStatus=SpanishStudyPrefs.geminiApiKey(activity).trim().isEmpty()?"no API key":"API key saved";
-        geminiStatus.setText("Model: "+SpanishStudyPrefs.geminiModel(activity)+" · "+keyStatus);
-        layout.addView(geminiStatus);
-
-        CheckBox common=new CheckBox(activity);
-        common.setText("Include very common words in vocabulary list");
-        common.setChecked(SpanishStudyPrefs.includeCommon(activity));
-        common.setOnCheckedChangeListener((v,c)->SpanishStudyPrefs.setIncludeCommon(activity,c));
-        layout.addView(common);
-
-        TextView vocabLabel=new TextView(activity);
-        vocabLabel.setText("Vocabulary list size");
-        layout.addView(vocabLabel);
-        NumberPicker limit=new NumberPicker(activity);
-        limit.setMinValue(10);
-        limit.setMaxValue(100);
-        limit.setValue(SpanishStudyPrefs.vocabLimit(activity));
-        limit.setWrapSelectorWheel(false);
-        limit.setOnValueChangedListener((p,o,n)->SpanishStudyPrefs.setVocabLimit(activity,n));
-        layout.addView(limit,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        new AlertDialog.Builder(activity)
-                .setTitle("Spanish study tools")
-                .setView(layout)
-                .setPositiveButton("Review vocabulary",(d,w)->openVocabularyReview(activity))
-                .setNeutralButton("Clear known words",(d,w)->{
-                    SpanishStudyPrefs.clearKnown(activity);
-                    Toast.makeText(activity,"Known-word list cleared",Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("Close",null)
-                .show();
+        SpanishStudySheet.show(activity);
     }
 
     private static void showGeminiSetup(Activity activity){
