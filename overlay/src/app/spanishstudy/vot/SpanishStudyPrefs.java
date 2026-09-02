@@ -19,6 +19,7 @@ final class SpanishStudyPrefs {
             SPANISH_SUBTITLE_BOTTOM="spanish_subtitle_bottom_dp",
             ENGLISH_SUBTITLE_BOTTOM="english_subtitle_bottom_dp",
             SUBTITLE_PAIR_BOTTOM="bilingual_subtitle_bottom_dp",
+            SOURCE_EXPRESSION="source_expression_enabled",
             GEMINI_ENABLED="gemini_enabled",
             GEMINI_API_KEY="gemini_api_key",
             GEMINI_MODEL="gemini_model";
@@ -74,6 +75,10 @@ final class SpanishStudyPrefs {
         return Math.min(spanishSubtitleBottom(c),englishSubtitleBottom(c));
     }
     static void setSubtitlePairBottom(Context c,int v){putInt(c,SUBTITLE_PAIR_BOTTOM,clampPosition(v));}
+
+    /** Experimental; opt-in because Android's playback Visualizer requires RECORD_AUDIO permission. */
+    static boolean sourceExpressionEnabled(Context c){return prefs(c).getBoolean(SOURCE_EXPRESSION,false);}
+    static void setSourceExpressionEnabled(Context c,boolean v){putBoolean(c,SOURCE_EXPRESSION,v);}
 
     static int vocabLimit(Context c){return Math.max(10,Math.min(100,prefs(c).getInt(VOCAB_LIMIT,40)));}
     static void setVocabLimit(Context c,int v){putInt(c,VOCAB_LIMIT,Math.max(10,Math.min(100,v)));}
