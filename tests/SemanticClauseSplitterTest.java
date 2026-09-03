@@ -76,7 +76,7 @@ public final class SemanticClauseSplitterTest {
     private static void strongTimingPauseRestoresPeriod() {
         String s = "we finished the first test then we checked the result carefully";
         // 11 lexical words -> 10 inter-word gaps. The 620ms pause after "test" is strong evidence.
-        long[] gaps = {30, 35, 40, 620, 35, 30, 35, 30, 30, 30};
+        long[] gaps = {30, 35, 40, 35, 620, 30, 35, 30, 30, 30};
         List<String> parts = SemanticClauseSplitter.split(s, gaps);
         require(parts.size() == 2, "strong measured pause should make two spoken phrases: " + parts);
         require(parts.get(0).endsWith("."), "strong pause should restore terminal punctuation");
