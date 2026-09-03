@@ -5,6 +5,7 @@ import java.util.List;
 public final class SourceCaptionTimingStoreTest {
     public static void main(String[] args) {
         usesInnerCaptionTiming();
+        exposesMeasuredInterWordPause();
         rejectsAmbiguousAlignment();
         System.out.println("source caption timing store: OK");
     }
@@ -26,12 +27,27 @@ public final class SourceCaptionTimingStoreTest {
         require(ends[1] == 3900, "last phrase must keep sentence end");
     }
 
+    private static void exposesMeasuredInterWordPause() {
+        SourceCaptionTimingStore.beginTranscript();
+        SourceCaptionTimingStore.addTimedChunk(1000, 1600, "I think ");
+        SourceCaptionTimingStore.addTimedChunk(1600, 2600, "this is fine ");
+        SourceCaptionTimingStore.addTimedChunk(3150, 3900, "but we should leave");
+
+        long[] gaps = SourceCaptionTimingStore.interWordGaps(
+                1000, 3900, "I think this is fine but we should leave");
+        require(gaps != null && gaps.length == 8, "expected one gap between each lexical word");
+        require(gaps[4] >= 500, "pause after fine should remain visible, got " + gaps[4]);
+        require(gaps[1] < 200, "normal within-speech transition should stay small, got " + gaps[1]);
+    }
+
     private static void rejectsAmbiguousAlignment() {
         SourceCaptionTimingStore.beginTranscript();
         SourceCaptionTimingStore.addTimedChunk(0, 1000, "completely different words");
         long[] ends = SourceCaptionTimingStore.phraseEndTimes(
                 0, 1000, "hello there friend", List.of("hello there", "friend"));
         require(ends == null, "unrelated timing stream must not be guessed");
+        require(SourceCaptionTimingStore.interWordGaps(0, 1000, "hello there friend") == null,
+                "ambiguous pause timing must not be guessed");
     }
 
     private static void require(boolean condition, String message) {

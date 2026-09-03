@@ -5,11 +5,15 @@ import java.util.List;
 public final class SemanticClauseSplitterTest {
     public static void main(String[] args) {
         shortSentenceStaysWhole();
+        shortTwoSentencesStillSplit();
         longSentencePrefersPunctuationPause();
         distantSentenceBoundaryStillSplits();
         multipleSentencesAreRecursivelySeparated();
         unpunctuatedThoughtDoesNotGetArbitrarilyChopped();
         conjunctionAloneDoesNotCreateTtsStop();
+        strongTimingPauseRestoresPeriod();
+        mediumTimingPauseRestoresComma();
+        longDiscourseRunOnGetsConservativeComma();
         reconstructionPreservesWords();
         weakRelativeClauseIsNotPreferredBoundary();
         System.out.println("semantic clause splitter: OK");
@@ -20,6 +24,13 @@ public final class SemanticClauseSplitterTest {
         List<String> parts = SemanticClauseSplitter.split(s);
         require(parts.size() == 1, "short sentence should stay whole");
         require(parts.get(0).equals(s), "short sentence changed");
+    }
+
+    private static void shortTwoSentencesStillSplit() {
+        String s = "We found the trail. Then we headed home safely.";
+        List<String> parts = SemanticClauseSplitter.split(s);
+        require(parts.size() == 2, "internal sentence pause should split even under width target");
+        require(parts.get(0).endsWith("."), "first short sentence boundary lost");
     }
 
     private static void longSentencePrefersPunctuationPause() {
@@ -59,7 +70,34 @@ public final class SemanticClauseSplitterTest {
         String s = "I kept trying the same setup for much longer than I expected because the first few results looked inconsistent enough that I wanted another clean comparison before changing anything";
         List<String> parts = SemanticClauseSplitter.split(s);
         require(parts.size() == 1,
-                "conjunction alone should not invent a speech pause or TTS clip boundary");
+                "weak conjunction alone should not invent a speech pause or TTS clip boundary");
+    }
+
+    private static void strongTimingPauseRestoresPeriod() {
+        String s = "we finished the first test then we checked the result carefully";
+        // 11 lexical words -> 10 inter-word gaps. The 620ms pause after "test" is strong evidence.
+        long[] gaps = {30, 35, 40, 35, 620, 30, 35, 30, 30, 30};
+        List<String> parts = SemanticClauseSplitter.split(s, gaps);
+        require(parts.size() == 2, "strong measured pause should make two spoken phrases: " + parts);
+        require(parts.get(0).endsWith("."), "strong pause should restore terminal punctuation");
+        require(parts.get(0).equals("we finished the first test."), "unexpected first phrase: " + parts.get(0));
+    }
+
+    private static void mediumTimingPauseRestoresComma() {
+        String s = "we kept walking toward the ridge but the weather changed very quickly after that";
+        // 14 words -> 13 gaps. 300ms before "but" should restore a comma and give the long run-on
+        // a natural clause boundary without pretending it was a full sentence stop.
+        long[] gaps = {25, 30, 25, 30, 25, 300, 25, 25, 30, 25, 30, 25, 25};
+        String restored = SemanticClauseSplitter.restorePunctuation(s, gaps);
+        require(restored.contains("ridge, but"), "medium pause did not restore comma: " + restored);
+        List<String> parts = SemanticClauseSplitter.split(s, gaps);
+        require(parts.size() >= 2, "restored pause should become a natural phrase boundary");
+    }
+
+    private static void longDiscourseRunOnGetsConservativeComma() {
+        String s = "I thought the road would keep climbing for another mile but the grade suddenly flattened out and the whole valley opened in front of us";
+        String restored = SemanticClauseSplitter.restorePunctuation(s, null);
+        require(restored.contains("mile, but"), "high-confidence discourse run-on should gain comma: " + restored);
     }
 
     private static void reconstructionPreservesWords() {
