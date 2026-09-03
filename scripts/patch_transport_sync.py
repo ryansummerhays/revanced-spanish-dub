@@ -3,8 +3,8 @@
 
 VideoState callbacks are useful but can arrive late or be missed on some YouTube builds. This adds a
 second, independent watchdog inside TtsEngine: while Spanish is active it samples the digital video
-position (not audio) and pauses the MediaPlayer whenever YouTube is paused, errored, or stalled. When
-video time advances again, the exact same MP3 resumes from the same position.
+position (not audio) and pauses the MediaPlayer whenever YouTube is paused, errored, or clearly
+stalled. When video time advances again, the exact same MP3 resumes from the same position.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def main() -> None:
     replace_once(
         tts,
         '''    /** Tracks the active synthesis/playback session to prevent overlapping segments. */\n    private long playbackId;''',
-        '''    /** Tracks the active synthesis/playback session to prevent overlapping segments. */\n    private long playbackId;\n\n    // Redundant transport synchronization. We intentionally use VIDEO TIME only: no microphone,\n    // Visualizer, speaker output, or room audio participates in pause/buffer detection.\n    private static final long TRANSPORT_WATCHDOG_TICK_MS = 90L;\n    private static final long TRANSPORT_STALL_PAUSE_MS = 420L;\n    private static final long TRANSPORT_ADVANCE_EPSILON_MS = 12L;\n    private boolean transportPaused;\n    private boolean transportWatchdogScheduled;\n    private long transportLastVideoMs = -1L;\n    private long transportLastAdvanceElapsedMs;''',
+        '''    /** Tracks the active synthesis/playback session to prevent overlapping segments. */\n    private long playbackId;\n\n    // Redundant transport synchronization. We intentionally use VIDEO TIME only: no microphone,\n    // Visualizer, speaker output, or room audio participates in pause/buffer detection. Normal\n    // YouTube time callbacks can be fairly coarse, so the stall threshold is deliberately >1 s;\n    // ordinary explicit PAUSED state still pauses immediately through the normal observer.\n    private static final long TRANSPORT_WATCHDOG_TICK_MS = 90L;\n    private static final long TRANSPORT_STALL_PAUSE_MS = 1_300L;\n    private static final long TRANSPORT_ADVANCE_EPSILON_MS = 12L;\n    private boolean transportPaused;\n    private boolean transportWatchdogScheduled;\n    private long transportLastVideoMs = -1L;\n    private long transportLastAdvanceElapsedMs;''',
         "add transport watchdog state",
     )
 
