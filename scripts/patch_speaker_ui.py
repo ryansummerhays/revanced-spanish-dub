@@ -60,6 +60,11 @@ def main():
     public static int speakerIndex(TranscriptSegment segment){
         return SpeakerAssignmentStore.speakerIndex(segment);
     }
+
+    public static boolean speakerVoicesEnabled(){
+        android.content.Context context=Utils.getContext();
+        return context!=null&&SpanishStudyPrefs.speakerVoicesEnabled(context);
+    }
 ''',"speaker APIs")
 
     rep(ov,
