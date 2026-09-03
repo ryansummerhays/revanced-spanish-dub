@@ -120,7 +120,7 @@ def main():
     public static void copyDiagnostics(Activity activity){
         if(activity==null)return;
         StringBuilder report=new StringBuilder();
-        report.append("Spanish Dub Study v2.6.1 diagnostics\\n");
+        report.append("Spanish Dub Study v2.6.3 diagnostics\\n");
         report.append("video=").append(VoiceOverTranslationPatch.getCurrentVideoIdForStudy()).append('\\n');
         report.append("session=").append(VoiceOverTranslationPatch.isSessionEnabled()).append('\\n');
         report.append("loading=").append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\\n');
