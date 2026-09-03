@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.10.0 final2 stable bundle
+name: Build Spanish Dub Study v2.10.0 final stable bundle
 
 on:
   workflow_dispatch:
@@ -92,7 +92,7 @@ jobs:
           python3 scripts/audit_v291_caption_recovery.py upstream
           python3 scripts/patch_v210_grounding_gate_compat.py upstream
           python3 scripts/patch_v210_google_local_stability_final.py upstream
-          python3 scripts/audit_v210_google_local_stability.py upstream
+          python3 scripts/audit_v210_google_local_stability_final.py upstream
       - name: Build Morphe patch bundle
         working-directory: upstream
         env:
@@ -118,7 +118,7 @@ jobs:
           cat SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.10.0-final2
+          name: spanish-dub-study-patches-v2.10.0-final
           path: dist/
           if-no-files-found: error
           retention-days: 30
