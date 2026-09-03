@@ -19,6 +19,7 @@ public final class SourceCaptionTimingStore {
     private static final Pattern WORD = Pattern.compile(
             "[\\p{L}\\p{N}]+(?:['’\\-][\\p{L}\\p{N}]+)*");
     private static final List<TimedWord> WORDS = new ArrayList<>();
+    private static final long EXPLICIT_SPEAKER_PAUSE_MS = 1_000L;
 
     private SourceCaptionTimingStore() {}
 
@@ -58,8 +59,10 @@ public final class SourceCaptionTimingStore {
     /**
      * Returns the measured silence after each lexical word in {@code sentenceText}, aligned to the
      * preserved JSON3 word timeline. This is the local prosody signal used by v2.11 punctuation
-     * restoration. A null result means alignment was not reliable enough and callers must fall back
-     * to text-only parsing.
+     * restoration. An explicit caption speaker-turn marker is treated as a hard pause even when the
+     * acoustic/timestamp gap is tiny, because two people must never be merged merely for TTS timing.
+     * A null result means alignment was not reliable enough and callers must fall back to text-only
+     * parsing.
      */
     public static synchronized long[] interWordGaps(long sentenceStartMs,
                                                      long sentenceEndMs,
@@ -71,7 +74,11 @@ public final class SourceCaptionTimingStore {
         for (int i = 0; i < gaps.length; i++) {
             TimedWord left = alignment.candidates.get(alignment.aligned[i]);
             TimedWord right = alignment.candidates.get(alignment.aligned[i + 1]);
-            gaps[i] = Math.max(0L, right.startMs - left.endMs);
+            long gap = Math.max(0L, right.startMs - left.endMs);
+            if (CaptionSpeakerTurnStore.hasBoundaryBetween(left.endMs, right.startMs)) {
+                gap = Math.max(gap, EXPLICIT_SPEAKER_PAUSE_MS);
+            }
+            gaps[i] = gap;
         }
         return gaps;
     }

@@ -7,6 +7,9 @@ import java.util.List;
  * Coalesces already-natural subtitle phrases into speech units that are long enough for reliable
  * Spanish TTS playback. The semantic parser remains responsible for finding good pause boundaries;
  * this class only prevents those boundaries from creating tiny deadline windows.
+ *
+ * Explicit speaker turns are hard boundaries. A short line may remain short at a speaker change;
+ * preserving voice ownership is more important than satisfying the normal duration floor.
  */
 public final class SpeechUnitPlanner {
     /** Normal lower bound for a dub/subtitle unit after coalescing. */
@@ -19,7 +22,11 @@ public final class SpeechUnitPlanner {
 
     private SpeechUnitPlanner() {}
 
-    public record Unit(long startMs, long endMs, String text) {
+    public record Unit(long startMs, long endMs, String text, boolean hardBoundaryBefore) {
+        public Unit(long startMs, long endMs, String text) {
+            this(startMs, endMs, text, false);
+        }
+
         public Unit {
             if (endMs < startMs) endMs = startMs;
             text = normalize(text);
@@ -40,7 +47,8 @@ public final class SpeechUnitPlanner {
         if (work.size() < 2) return work;
 
         // If a short cue is followed by genuine silence, first borrow that otherwise-unused time
-        // instead of joining text across the pause. This keeps natural paragraph breaks intact.
+        // instead of joining text across the pause. This is safe even before a speaker boundary:
+        // only silence is borrowed; the next speaker's text/timestamp is never crossed.
         for (int i = 0; i + 1 < work.size(); i++) {
             Unit cur = work.get(i);
             if (cur.durationMs() >= MIN_UNIT_MS) continue;
@@ -50,12 +58,14 @@ public final class SpeechUnitPlanner {
             long need = MIN_UNIT_MS - cur.durationMs();
             long extension = Math.min(need, gap);
             if (extension > 0) {
-                work.set(i, new Unit(cur.startMs(), cur.endMs() + extension, cur.text()));
+                work.set(i, new Unit(cur.startMs(), cur.endMs() + extension,
+                        cur.text(), cur.hardBoundaryBefore()));
             }
         }
 
         // Merge remaining tiny units with the least-disruptive adjacent phrase. Punctuation stays in
         // the text, so Edge SSML still produces the original comma/sentence pause inside the unit.
+        // Explicit speaker turns are never crossed even if that leaves a sub-floor unit intact.
         for (int guard = 0; guard < 256; guard++) {
             int shortAt = firstMergeableShort(work);
             if (shortAt < 0) break;
@@ -91,6 +101,8 @@ public final class SpeechUnitPlanner {
     }
 
     private static boolean canMerge(Unit a, Unit b) {
+        // b.hardBoundaryBefore means b starts a new explicit speaker turn.
+        if (b.hardBoundaryBefore()) return false;
         long gap = b.startMs() - a.endMs();
         if (gap > MAX_JOIN_GAP_MS) return false;
         long start = Math.min(a.startMs(), b.startMs());
@@ -113,7 +125,8 @@ public final class SpeechUnitPlanner {
         work.set(left, new Unit(
                 Math.min(a.startMs(), b.startMs()),
                 Math.max(a.endMs(), b.endMs()),
-                combinedText(a, b)));
+                combinedText(a, b),
+                a.hardBoundaryBefore()));
         work.remove(left + 1);
     }
 

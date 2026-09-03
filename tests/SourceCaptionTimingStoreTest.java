@@ -6,11 +6,13 @@ public final class SourceCaptionTimingStoreTest {
     public static void main(String[] args) {
         usesInnerCaptionTiming();
         exposesMeasuredInterWordPause();
+        promotesSpeakerTurnToHardPause();
         rejectsAmbiguousAlignment();
         System.out.println("source caption timing store: OK");
     }
 
     private static void usesInnerCaptionTiming() {
+        CaptionSpeakerTurnStore.beginTranscript();
         SourceCaptionTimingStore.beginTranscript();
         SourceCaptionTimingStore.addTimedChunk(1000, 1600, "I think ");
         SourceCaptionTimingStore.addTimedChunk(1600, 2600, "this is fine, ");
@@ -28,6 +30,7 @@ public final class SourceCaptionTimingStoreTest {
     }
 
     private static void exposesMeasuredInterWordPause() {
+        CaptionSpeakerTurnStore.beginTranscript();
         SourceCaptionTimingStore.beginTranscript();
         SourceCaptionTimingStore.addTimedChunk(1000, 1600, "I think ");
         SourceCaptionTimingStore.addTimedChunk(1600, 2600, "this is fine ");
@@ -40,7 +43,22 @@ public final class SourceCaptionTimingStoreTest {
         require(gaps[1] < 200, "normal within-speech transition should stay small, got " + gaps[1]);
     }
 
+    private static void promotesSpeakerTurnToHardPause() {
+        CaptionSpeakerTurnStore.beginTranscript();
+        SourceCaptionTimingStore.beginTranscript();
+        SourceCaptionTimingStore.addTimedChunk(0, 1000, "I agree ");
+        CaptionSpeakerTurnStore.markFromChunk(1000, 1050, ">>");
+        SourceCaptionTimingStore.addTimedChunk(1050, 2000, "no wait");
+
+        long[] gaps = SourceCaptionTimingStore.interWordGaps(
+                0, 2000, "I agree no wait");
+        require(gaps != null && gaps.length == 3, "expected aligned speaker-turn sentence");
+        require(gaps[1] >= 1000,
+                "explicit speaker change must act as a hard phrase pause, got " + gaps[1]);
+    }
+
     private static void rejectsAmbiguousAlignment() {
+        CaptionSpeakerTurnStore.beginTranscript();
         SourceCaptionTimingStore.beginTranscript();
         SourceCaptionTimingStore.addTimedChunk(0, 1000, "completely different words");
         long[] ends = SourceCaptionTimingStore.phraseEndTimes(
