@@ -139,10 +139,11 @@ def main():
         "add rolling Gemini horizon and retry constants")
 
     rep(tr,
-'''        final int batchDelay = isMyMemory ? MYMEMORY_INTER_BATCH_DELAY_MS
+'''        final int batchDelay = isGemini ? 0
+                : isMyMemory ? MYMEMORY_INTER_BATCH_DELAY_MS
                 : isOpenRouter ? OPENROUTER_INTER_BATCH_DELAY_MS
                   : GOOGLE_INTER_BATCH_DELAY_MS;''',
-'''        final int batchDelay = GeminiTranslator.isEnabled() ? GEMINI_INTER_BATCH_DELAY_MS
+'''        final int batchDelay = isGemini ? GEMINI_INTER_BATCH_DELAY_MS
                 : isMyMemory ? MYMEMORY_INTER_BATCH_DELAY_MS
                 : isOpenRouter ? OPENROUTER_INTER_BATCH_DELAY_MS
                   : GOOGLE_INTER_BATCH_DELAY_MS;''',
@@ -160,15 +161,13 @@ def main():
             // Initial restore/deep-link position can arrive a few frames after newVideoLoaded.''',
         "add Gemini retry backoff")
 
-    # Insert the rolling-horizon gate BEFORE the runtime-diagnostics patch anchor so that later
-    # diagnostics can still instrument the unchanged 'List<TranscriptSegment> batch ... int offset'.
     rep(tr,
 '''                firstBatchAfterReposition = false;
 
                 List<TranscriptSegment> batch = batches.get(index);''',
 '''                firstBatchAfterReposition = false;
 
-                if (GeminiTranslator.isEnabled()) {
+                if (isGemini) {
                     List<TranscriptSegment> candidateBatch = batches.get(index);
                     if (!candidateBatch.isEmpty()
                             && candidateBatch.get(0).startMs > timeMs + GEMINI_TRANSLATION_HORIZON_MS) {
@@ -187,7 +186,7 @@ def main():
                 applyBatch(working, batch, offset, translated, targetLang);''',
 '''                if (abortTranslation) break;
 
-                if (translated == null && GeminiTranslator.isEnabled()) {
+                if (translated == null && isGemini) {
                     final int waitMs = geminiRetryBackoffMs;
                     SpanishStudyDiagnostics.record("GEMINI", "batch deferred; retry in " + waitMs
                             + "ms index=" + index + " playhead=" + VoiceOverTranslationPatch.videoPositionHint);
@@ -197,7 +196,7 @@ def main():
                     firstBatchAfterReposition = true;
                     continue;
                 }
-                if (translated != null && GeminiTranslator.isEnabled()) geminiRetryBackoffMs = GEMINI_RETRY_MIN_MS;
+                if (translated != null && isGemini) geminiRetryBackoffMs = GEMINI_RETRY_MIN_MS;
 
                 applyBatch(working, batch, offset, translated, targetLang);''',
         "retry transient Gemini failure without marking batch done")
