@@ -29,13 +29,15 @@ import app.morphe.extension.youtube.patches.voiceovertranslation.TranscriptSegme
  * and inspect video context around those timestamps to resolve unclear words, names, jargon and
  * speaker changes. It never captures the phone microphone or analyzes room/speaker output.
  *
- * The existing text-only Gemini translator remains the automatic fallback when YouTube-URL video
- * processing is unavailable, times out, or fails validation.
+ * The public video is clipped to only the current subtitle window (+ a small context margin). That is
+ * crucial for long videos and mid-video starts: Gemini never needs to process the first 40 minutes in
+ * order to ground a phrase at 40:00.
  */
 final class GeminiVideoGrounding {
     private static final String INTERACTIONS_URL="https://generativelanguage.googleapis.com/v1beta/interactions";
     private static final int CONNECT_TIMEOUT_MS=7_000;
-    private static final int READ_TIMEOUT_MS=24_000;
+    private static final int READ_TIMEOUT_MS=20_000;
+    private static final double VIDEO_CONTEXT_MARGIN_SECONDS=2.5;
 
     private GeminiVideoGrounding(){}
 
@@ -82,11 +84,24 @@ final class GeminiVideoGrounding {
         JSONObject root=new JSONObject();
         root.put("model",model);
 
+        long firstMs=segments.get(0).startMs;
+        long lastMs=segments.get(segments.size()-1).endMs;
+        double clipStart=Math.max(0.0,firstMs/1000.0-VIDEO_CONTEXT_MARGIN_SECONDS);
+        double clipEnd=Math.max(clipStart+1.0,lastMs/1000.0+VIDEO_CONTEXT_MARGIN_SECONDS);
+
         JSONArray input=new JSONArray();
         JSONObject video=new JSONObject();
         video.put("type","video");
         video.put("uri","https://www.youtube.com/watch?v="+videoId);
-        video.put("processing","agentic");
+        // Static clipping is intentionally used for low-latency phrase grounding. Google's current
+        // video-understanding API supports start/end offsets in static mode; therefore a 50-minute
+        // VOD opened at 40:00 processes only this small local window, not the preceding 40 minutes.
+        JSONObject processing=new JSONObject();
+        processing.put("type","static");
+        processing.put("start_offset",clipStart);
+        processing.put("end_offset",clipEnd);
+        processing.put("fps",1.0);
+        video.put("processing",processing);
         input.put(video);
 
         JSONObject text=new JSONObject();
@@ -99,8 +114,6 @@ final class GeminiVideoGrounding {
         generation.put("temperature",0.05);
         root.put("generation_config",generation);
 
-        // Structured JSON dramatically reduces positional/speaker-label drift. Keep the schema small
-        // enough to remain compatible with fast Gemini models.
         JSONObject itemProps=new JSONObject();
         itemProps.put("id",new JSONObject().put("type","integer"));
         itemProps.put("source",new JSONObject().put("type","string"));
@@ -183,8 +196,6 @@ final class GeminiVideoGrounding {
             }
         }
 
-        // Independent semantic check exactly like the text-only path. A video-aware answer still is
-        // model output and does not get to bypass hallucination defenses.
         List<Integer> ids=new ArrayList<>();
         List<String> spanish=new ArrayList<>();
         for(int i=0;i<translations.size();i++)if(translations.get(i)!=null&&!translations.get(i).isBlank()){
@@ -205,8 +216,6 @@ final class GeminiVideoGrounding {
             Logger.printDebug(()->"Audiovisual grounding back-translation verifier unavailable: "+verifier.getMessage());
         }
 
-        // Rescue only failed Spanish lines with the conservative ordinary translator. Speaker side
-        // data can still be useful even if one translation candidate was rejected.
         List<Integer> rescueIds=new ArrayList<>();
         List<String> rescueSource=new ArrayList<>();
         for(int i=0;i<translations.size();i++)if(translations.get(i)==null||translations.get(i).isBlank()){
@@ -244,6 +253,7 @@ final class GeminiVideoGrounding {
             StringBuilder out=new StringBuilder();
             for(int i=0;i<steps.length();i++){
                 JSONObject step=steps.optJSONObject(i);if(step==null)continue;
+                if(!"model_output".equals(step.optString("type")))continue;
                 JSONArray content=step.optJSONArray("content");if(content==null)continue;
                 for(int j=0;j<content.length();j++){
                     JSONObject c=content.optJSONObject(j);if(c==null)continue;
@@ -251,10 +261,6 @@ final class GeminiVideoGrounding {
                 }
             }
             if(out.length()>0)return out.toString();
-        }
-        JSONArray outputs=root.optJSONArray("outputs");
-        if(outputs!=null)for(int i=outputs.length()-1;i>=0;i--){
-            JSONObject o=outputs.optJSONObject(i);if(o!=null&&!o.optString("text","").isBlank())return o.optString("text");
         }
         JSONObject interaction=root.optJSONObject("interaction");
         return interaction==null?"":extractText(interaction);
