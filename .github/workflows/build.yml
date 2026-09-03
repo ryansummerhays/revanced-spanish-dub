@@ -91,6 +91,7 @@ jobs:
           python3 scripts/patch_speaker_ui.py upstream
           python3 scripts/patch_speaker_voices.py upstream
           python3 scripts/patch_runtime_diagnostics.py upstream
+          python3 scripts/patch_diagnostics_version.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
