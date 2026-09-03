@@ -22,7 +22,11 @@ final class SpanishStudyPrefs {
             SOURCE_EXPRESSION="source_expression_enabled",
             GEMINI_ENABLED="gemini_enabled",
             GEMINI_API_KEY="gemini_api_key",
-            GEMINI_MODEL="gemini_model";
+            GEMINI_MODEL="gemini_model",
+            VIDEO_GROUNDING="video_grounding_enabled",
+            SPEAKER_RECOGNITION="speaker_recognition_enabled",
+            SPEAKER_VOICES="speaker_voices_enabled",
+            SPEAKER_LABELS="speaker_labels_enabled";
 
     private SpanishStudyPrefs(){}
 
@@ -76,7 +80,7 @@ final class SpanishStudyPrefs {
     }
     static void setSubtitlePairBottom(Context c,int v){putInt(c,SUBTITLE_PAIR_BOTTOM,clampPosition(v));}
 
-    /** Experimental; opt-in because Android's playback Visualizer requires RECORD_AUDIO permission. */
+    /** Legacy v2.3/v2.4 preference; live playback-audio expression analysis is no longer used. */
     static boolean sourceExpressionEnabled(Context c){return prefs(c).getBoolean(SOURCE_EXPRESSION,false);}
     static void setSourceExpressionEnabled(Context c,boolean v){putBoolean(c,SOURCE_EXPRESSION,v);}
 
@@ -91,4 +95,14 @@ final class SpanishStudyPrefs {
     static void setGeminiApiKey(Context c,String v){putString(c,GEMINI_API_KEY,v==null?"":v.trim());}
     static String geminiModel(Context c){String v=prefs(c).getString(GEMINI_MODEL,DEFAULT_GEMINI_MODEL);return v==null||v.isBlank()?DEFAULT_GEMINI_MODEL:v;}
     static void setGeminiModel(Context c,String v){String n=v==null?"":v.trim();putString(c,GEMINI_MODEL,n.isEmpty()?DEFAULT_GEMINI_MODEL:n);}
+
+    /** Gemini may inspect the public YouTube video itself to ground unclear ASR words and speakers. */
+    static boolean videoGroundingEnabled(Context c){return prefs(c).getBoolean(VIDEO_GROUNDING,true);}
+    static void setVideoGroundingEnabled(Context c,boolean v){putBoolean(c,VIDEO_GROUNDING,v);}
+    static boolean speakerRecognitionEnabled(Context c){return prefs(c).getBoolean(SPEAKER_RECOGNITION,true);}
+    static void setSpeakerRecognitionEnabled(Context c,boolean v){putBoolean(c,SPEAKER_RECOGNITION,v);}
+    static boolean speakerVoicesEnabled(Context c){return prefs(c).getBoolean(SPEAKER_VOICES,true);}
+    static void setSpeakerVoicesEnabled(Context c,boolean v){putBoolean(c,SPEAKER_VOICES,v);}
+    static boolean speakerLabelsEnabled(Context c){return prefs(c).getBoolean(SPEAKER_LABELS,true);}
+    static void setSpeakerLabelsEnabled(Context c,boolean v){putBoolean(c,SPEAKER_LABELS,v);}
 }
