@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.6.2 patch bundle
+name: Build Spanish Dub Study v2.6.3 patch bundle
 
 on:
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.NaturalProsodyFormatterTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.6.2 overlay
+      - name: Apply Spanish study v2.6.3 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -74,6 +74,7 @@ jobs:
           python3 scripts/patch_long_video_startup.py upstream
           python3 scripts/patch_video_grounding_delegate.py upstream
           python3 scripts/patch_gemini_model_compat.py upstream
+          python3 scripts/patch_gemini_json_recovery.py upstream
           python3 scripts/patch_speaker_reference_clips.py upstream
           python3 scripts/patch_playhead_priority.py upstream
           python3 scripts/patch_autostart_session.py upstream
@@ -99,7 +100,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.6.2 bundle
+      - name: Rebrand and package v2.6.3 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -108,8 +109,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.6.2.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.6.2\nDescription: Translation-stage hotfix driven by v2.6.1 device diagnostics. Caption fetch and playhead targeting were working, but the playhead Gemini batch returned null before any Spanish/TTS could be produced. Existing installs defaulted to gemini-3.5-flash-lite while this translator requires Gemini structured JSON output; current Google documentation lists structured-output support for gemini-3.5-flash and gemini-3.1-flash-lite but not 3.5-flash-lite. v2.6.2 transparently migrates the legacy saved 3.5-flash-lite preference to gemini-3.5-flash, changes the default accordingly, and removes the legacy temperature parameter for Gemini 3.5 requests. Exact primary-Gemini and Google-fallback failures are now recorded in Copy dub diagnostics so any remaining failure identifies its HTTP/error cause rather than merely returning outputs=-1. Non-blocking audiovisual grounding, current-playhead-first translation, speaker analysis/voices, bounded in-memory TTS buffering, pause/resume transport sync, source-word timing, phrase-start preservation and hallucination guards remain. Full dubbed videos are never cached to disk. Based on Morphe 1.41.0\nVersion: 2.6.2\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.6.3.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.6.3\nDescription: Device-diagnostic hotfix for truncated Gemini structured JSON. The source caption fetch and playhead scheduler were working, but Gemini 3.5 Flash returned only a short prefix of the first JSON object, causing JSONException and then a rate-limited Google fallback. v2.6.3 configures Gemini 3.5 Flash with minimal thinking for the latency-sensitive translation task, raises the structured-output token ceiling so hidden reasoning cannot consume nearly all visible output space, and records finishReason plus token usage when a structured response is malformed. If a multi-event Gemini batch still fails, the exact requested events are retried as one-event Gemini requests before any Google fallback is attempted, so a single truncated JSON response or Google HTTP 429 no longer kills the entire audible dub region. Existing source-echo/alignment/hallucination guards, non-blocking video grounding, playhead-first startup, speaker labels/alternate voices, pause/resume sync, bounded in-memory TTS buffering, source-word timing and phrase-start preservation remain. Full dubbed videos are never cached to disk. Based on Morphe 1.41.0\nVersion: 2.6.3\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -124,7 +125,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.6.2
+          name: spanish-dub-study-patches-v2.6.3
           path: dist/
           if-no-files-found: error
           retention-days: 30
