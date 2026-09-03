@@ -148,28 +148,31 @@ import app.spanishstudy.vot.SemanticClauseSplitter;
 ''',
         "remove speaker marker without accidentally joining words")
 
-    # If the next raw caption line begins a new explicit speaker turn, finish the current sentence
-    # before appending the next person's words. Mid-event markers are handled by the timing store,
-    # which promotes the marker to a hard semantic pause before phrase splitting.
+    # patch_natural_speech_boundaries has already rewritten both flush expressions. Add the speaker
+    # condition to those final forms instead of patching the upstream/pre-natural-pause shape.
     rep(fetcher,
 '''                    flush = endsSentence(text)
+                            || endsNaturalPhrasePause(text, gap)
                             || text.length() >= MAX_SENTENCE_CHARS
                             || (gap > MAX_SENTENCE_GAP_MS && text.length() > 80);''',
 '''                    flush = CaptionSpeakerTurnStore.isTurnStartNear(lines.get(i + 1).startMs)
                             || endsSentence(text)
+                            || endsNaturalPhrasePause(text, gap)
                             || text.length() >= MAX_SENTENCE_CHARS
                             || (gap > MAX_SENTENCE_GAP_MS && text.length() > 80);''',
         "hard-stop punctuated sentence merge before explicit speaker turn")
 
     rep(fetcher,
-'''                    flush = gap > UNPUNCTUATED_GAP_MS
-                            || (gap > UNPUNCTUATED_SOFT_GAP_MS
-                            && startsWithUpperCase(lines.get(i + 1).text))
+'''                    flush = gap > 450
+                            || (gap > 180
+                            && (startsWithUpperCase(lines.get(i + 1).text)
+                            || text.length() >= 55))
                             || text.length() >= MAX_UNPUNCTUATED_CHARS;''',
 '''                    flush = CaptionSpeakerTurnStore.isTurnStartNear(lines.get(i + 1).startMs)
-                            || gap > UNPUNCTUATED_GAP_MS
-                            || (gap > UNPUNCTUATED_SOFT_GAP_MS
-                            && startsWithUpperCase(lines.get(i + 1).text))
+                            || gap > 450
+                            || (gap > 180
+                            && (startsWithUpperCase(lines.get(i + 1).text)
+                            || text.length() >= 55))
                             || text.length() >= MAX_UNPUNCTUATED_CHARS;''',
         "hard-stop unpunctuated sentence merge before explicit speaker turn")
 
