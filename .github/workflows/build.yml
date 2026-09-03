@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.6.0 patch bundle
+name: Build Spanish Dub Study v2.6.1 patch bundle
 
 on:
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.NaturalProsodyFormatterTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.6.0 overlay
+      - name: Apply Spanish study v2.6.1 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -88,6 +88,7 @@ jobs:
           python3 scripts/patch_subtitle_study_gestures.py upstream
           python3 scripts/patch_speaker_ui.py upstream
           python3 scripts/patch_speaker_voices.py upstream
+          python3 scripts/patch_runtime_diagnostics.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -97,7 +98,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.6.0 bundle
+      - name: Rebrand and package v2.6.1 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -106,8 +107,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.6.0.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.6.0\nDescription: Audiovisual grounding, conservative speaker-aware dubbing, and strict playhead-first long-video startup. Gemini may inspect a tightly clipped window of the actual public YouTube video around the current subtitle batch so poorly enunciated auto-caption words, niche jargon, names, acronyms and slang can be corrected using real audio, sentence context and visible video context rather than transcript text alone. Confirmed speakers are labeled A-H and can receive stable alternate native Spanish Edge voices. Recent high-confidence speakers are also supplied back to Gemini as tiny named acoustic reference clips, improving cross-batch identity consistency without microphone/room-audio capture and without treating yelling, whispering or prosody changes as new people. Translation startup seeds the dispatcher from the actual current video clock, settles restored/deep-link position briefly, always prioritizes the batch under the playhead, and reprioritizes non-streaming Gemini after seeks. Video grounding uses static start/end clipping so opening a 50+ minute video at 40:00 processes only the local current window rather than preceding video. Grounded English corrections remain conservative side data and Spanish remains protected by source-echo, language/spacing/anchor and independent back-translation checks. Existing non-destructive speech-rate updates, pause/resume transport sync, phrase-start preservation, bounded in-memory TTS buffering, source-word timing and natural phrase segmentation are retained. Full videos are never cached to disk. Based on Morphe 1.41.0\nVersion: 2.6.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.6.1.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.6.1\nDescription: Reliability hotfix for v2.6.0. Public-YouTube audiovisual grounding and speaker analysis are now strictly non-blocking side data: ordinary transcript-context Gemini translation begins immediately and can never wait for a video-understanding request. Only one audiovisual sidecar may run per video at a time and failures back off for five minutes, preventing slow/unsupported multimodal calls from starving every audible subtitle batch. Current-playhead translation priority, bounded in-memory TTS buffering, non-destructive max-speech-rate changes, pause/resume transport sync, phrase-start preservation, source-word timing, contextual ASR correction, hallucination guards, speaker labels and stable alternate Spanish voices remain. Initial playhead acquisition is guarded so a device-specific player clock exception cannot abort newVideoLoaded. A new in-app Diagnostics section records source-caption fetches, progressive translation batch windows, subtitle publication, TTS readiness/playback/failures, grounding sidecar status, video clock samples, and transcript-fetch errors. Tap Copy dub diagnostics after reproducing a failure and paste the report into ChatGPT; it contains no Gemini API key, microphone capture, or room audio. Full dubbed videos are never cached to disk. Based on Morphe 1.41.0\nVersion: 2.6.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -122,7 +123,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.6.0
+          name: spanish-dub-study-patches-v2.6.1
           path: dist/
           if-no-files-found: error
           retention-days: 30
