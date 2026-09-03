@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.5.1 patch bundle
+name: Build Spanish Dub Study v2.5.2 patch bundle
 
 on:
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.NaturalProsodyFormatterTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.5.1 overlay
+      - name: Apply Spanish study v2.5.2 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -71,6 +71,7 @@ jobs:
           python3 scripts/patch_bilingual_subtitles.py upstream
           python3 scripts/patch_autodub_timeline.py upstream
           python3 scripts/patch_quickstart_gemini.py upstream
+          python3 scripts/patch_long_video_startup.py upstream
           python3 scripts/patch_autostart_session.py upstream
           python3 scripts/patch_live_speech_rate.py upstream
           python3 scripts/patch_translation_language_guard.py upstream
@@ -91,7 +92,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.5.1 bundle
+      - name: Rebrand and package v2.5.2 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -100,8 +101,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.5.1.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.5.1\nDescription: Phrase-start synchronization hotfix on top of v2.5.0. Ordinary sequential Spanish playback is no longer allowed to trim or seek past the beginning of a synthesized phrase merely because synthesis arrived late or the measured audio cannot fit the remaining source slot at the configured maximum rate. Only a real explicit user seek may start inside an MP3; otherwise Spanish begins from its first word, while the immutable source deadline remains responsible for preventing cumulative drift. The v2.5 transport watchdog also no longer gates every freshly prepared phrase on potentially stale VideoState snapshots: an actual pause is latched by pause() even during in-flight synthesis, and advancing source-video time is authoritative for resume. This removes the regression where Spanish could enter partway through each bilingual subtitle phrase. The bounded moving TTS preparation window remains three minutes ahead and forty-five seconds behind, the in-memory LRU remains capped at 400 phrases, and full dubbed videos are never persisted to disk. Grounded Gemini translation, source-word subtitle timing, measured Edge duration fitting, replay tools, natural punctuation prosody, and transport synchronization are retained. Based on Morphe 1.41.0\nVersion: 2.5.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.5.2.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.5.2\nDescription: Long-video startup reliability fix on top of v2.5.1. Gemini still keeps the complete immutable transcript for exact source IDs, local context, subtitle timing, seeking and translation alignment, but whole-video recurring-term mining no longer scans every semantic clause before the first progressive translation can begin. For large VODs it uses an evenly distributed sample capped at 600 clauses, while each active batch still receives its complete nearby transcript context. The first audible Gemini batch is also reduced to about 220 source characters so Spanish subtitles and TTS can become available quickly on 50-90+ minute videos instead of being starved by video-length-dependent preparation. Phrase-start preservation, transport pause/resume synchronization, bounded in-memory TTS buffering, grounded Gemini validation/back-translation, JSON3 source-word timing, natural phrase segmentation and study replay controls are retained. Full videos are not cached to disk. Based on Morphe 1.41.0\nVersion: 2.5.2\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -116,7 +117,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.5.1
+          name: spanish-dub-study-patches-v2.5.2
           path: dist/
           if-no-files-found: error
           retention-days: 30
