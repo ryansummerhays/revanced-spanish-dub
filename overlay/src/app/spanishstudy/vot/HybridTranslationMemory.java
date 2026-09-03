@@ -20,22 +20,22 @@ final class HybridTranslationMemory {
 
     private static final int MAX_ENTRIES = 4_000;
 
-    private static final class Entry {
+    private static final class CacheEntry {
         final String text;
         final Quality quality;
         final String model;
 
-        Entry(String text, Quality quality, String model) {
+        CacheEntry(String text, Quality quality, String model) {
             this.text = text;
             this.quality = quality;
             this.model = model == null ? "" : model;
         }
     }
 
-    private static final LinkedHashMap<String, Entry> CACHE =
-            new LinkedHashMap<String, Entry>(512, 0.75f, true) {
+    private static final LinkedHashMap<String, CacheEntry> CACHE =
+            new LinkedHashMap<String, CacheEntry>(512, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
                     return size() > MAX_ENTRIES;
                 }
             };
@@ -49,7 +49,7 @@ final class HybridTranslationMemory {
         if (segments == null || segments.isEmpty()) return new ArrayList<>();
         ArrayList<String> out = new ArrayList<>(segments.size());
         for (TranscriptSegment segment : segments) {
-            Entry entry = CACHE.get(key(videoId, segment, targetLang));
+            CacheEntry entry = CACHE.get(key(videoId, segment, targetLang));
             if (entry == null || entry.quality != Quality.GEMINI
                     || !entry.model.equals(model == null ? "" : model)) return null;
             out.add(entry.text);
@@ -63,7 +63,7 @@ final class HybridTranslationMemory {
         if (segments == null || segments.isEmpty()) return new ArrayList<>();
         ArrayList<String> out = new ArrayList<>(segments.size());
         for (TranscriptSegment segment : segments) {
-            Entry entry = CACHE.get(key(videoId, segment, targetLang));
+            CacheEntry entry = CACHE.get(key(videoId, segment, targetLang));
             if (entry == null) return null;
             out.add(entry.text);
         }
@@ -95,14 +95,14 @@ final class HybridTranslationMemory {
         for (int i = 0; i < segments.size(); i++) {
             String translated = translations.get(i);
             if (translated == null || translated.isBlank()) continue;
-            CACHE.put(key(videoId, segments.get(i), targetLang), new Entry(translated, quality, model));
+            CACHE.put(key(videoId, segments.get(i), targetLang), new CacheEntry(translated, quality, model));
         }
     }
 
     static synchronized String summary() {
         int gemini = 0;
         int google = 0;
-        for (Entry entry : CACHE.values()) {
+        for (CacheEntry entry : CACHE.values()) {
             if (entry.quality == Quality.GEMINI) gemini++;
             else google++;
         }
