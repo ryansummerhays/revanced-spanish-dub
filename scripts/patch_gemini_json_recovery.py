@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""Harden Gemini structured output and keep long-video translation alive across quota hiccups.
-
-v2.6.3 fixed truncated structured JSON, but device diagnostics exposed a second failure mode: the
-translator could sprint several minutes ahead, hit Gemini HTTP 429, then upstream permanently aborted
-the translation session. Already translated phrases kept working for a while, which made the voice
-appear to stop and recover unpredictably; once playback reached the untranslated region it could not
-recover without a reload.
-
-This patch keeps all v2.6.3 JSON recovery and adds a rolling translation worker:
-- minimal Gemini thinking + generous structured-output budget;
-- malformed JSON diagnostics and one-event Gemini recovery;
-- current/playhead region remains immediate;
-- target generation is held to roughly two minutes ahead of playback instead of racing through a VOD;
-- successful Gemini batches are paced to reduce request-rate pressure;
-- transient/null Gemini batches back off and retry without being marked done;
-- Gemini 429 no longer permanently aborts the video; fatal auth/billing errors still do.
-"""
+"""Harden Gemini structured output and keep long-video translation alive across quota hiccups."""
 from pathlib import Path
 import sys
 
@@ -32,13 +16,9 @@ def rep(path: Path, old: str, new: str, label: str):
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_gemini_json_recovery.py <morphe-root>")
-
     root = Path(sys.argv[1]).resolve()
     gemini = root / "extensions/youtube/src/main/java/app/spanishstudy/vot/GeminiTranslator.java"
     tr = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TranscriptTranslator.java"
-    for path in (gemini, tr):
-        if not path.is_file():
-            raise RuntimeError(f"Required source missing: {path}")
 
     rep(gemini,
 '''        JSONObject generationConfig = new JSONObject()
@@ -73,7 +53,6 @@ def main():
         if (parts == null || parts.length() == 0) {
             throw new Exception("Gemini returned no text finish=" + finishReason + usageSummary);
         }
-
         String jsonText = parts.getJSONObject(0).optString("text", "").trim();
         final JSONArray arr;
         try {
@@ -84,7 +63,7 @@ def main():
             throw new Exception("Gemini structured JSON incomplete finish=" + finishReason
                     + " chars=" + jsonText.length() + usageSummary, malformed);
         }''',
-        "diagnose malformed/truncated structured JSON")
+        "diagnose malformed structured JSON")
 
     rep(gemini,
 '''        } catch (Exception ex) {
@@ -109,45 +88,32 @@ def main():
             SpanishStudyDiagnostics.record("GEMINI", "primary failed model="
                     + SpanishStudyPrefs.geminiModel(Utils.getContext()) + " "
                     + ex.getClass().getSimpleName() + ": " + safeDiagnostic(ex.getMessage()));
-
             final String primaryMessage = ex.getMessage() == null ? "" : ex.getMessage();
             final boolean primaryRateLimited = primaryMessage.contains("429")
                     || primaryMessage.toLowerCase(java.util.Locale.ROOT).contains("quota");
-
-            // A quota/rate-limit response will also reject a burst of one-event retries, so return
-            // control to TranscriptTranslator's paced backoff loop instead of multiplying requests.
             if (!primaryRateLimited) {
                 try {
                     List<String> recovered = new ArrayList<>(segments.size());
                     if (start >= 0) {
-                        for (int i = 0; i < segments.size(); i++) {
+                        for (int i = 0; i < segments.size(); i++)
                             recovered.addAll(translateRange(prepared.globalContext, prepared.segments,
                                     start + i, start + i + 1, targetLang));
-                        }
                     } else {
                         String localContext = buildGlobalContext(videoId, segments);
-                        for (int i = 0; i < segments.size(); i++) {
+                        for (int i = 0; i < segments.size(); i++)
                             recovered.addAll(translateRange(localContext, segments, i, i + 1, targetLang));
-                        }
                     }
                     if (recovered.size() == segments.size()) {
-                        SpanishStudyDiagnostics.record("GEMINI", "single-event recovery succeeded outputs="
-                                + recovered.size());
+                        SpanishStudyDiagnostics.record("GEMINI", "single-event recovery succeeded outputs=" + recovered.size());
                         return recovered;
                     }
-                    throw new Exception("Gemini recovery count mismatch " + recovered.size()
-                            + "/" + segments.size());
                 } catch (Exception retryError) {
                     SpanishStudyDiagnostics.record("GEMINI", "single-event recovery failed "
-                            + retryError.getClass().getSimpleName() + ": "
-                            + safeDiagnostic(retryError.getMessage()));
+                            + retryError.getClass().getSimpleName() + ": " + safeDiagnostic(retryError.getMessage()));
                 }
             } else {
                 SpanishStudyDiagnostics.record("GEMINI", "rate limited; deferring retry instead of bursting");
             }
-
-            // Keep Google as a best-effort rescue, but if it is also rate limited the outer
-            // TranscriptTranslator now leaves this batch undone and retries later.
             try {
                 List<String> fallback=translateFallback(segments,targetLang);
                 SpanishStudyDiagnostics.record("FALLBACK", "Google text fallback returned outputs="
@@ -155,15 +121,12 @@ def main():
                 return fallback;
             } catch(Exception fallbackError){
                 SpanishStudyDiagnostics.record("FALLBACK", "Google text fallback failed "
-                        + fallbackError.getClass().getSimpleName() + ": "
-                        + safeDiagnostic(fallbackError.getMessage()));
+                        + fallbackError.getClass().getSimpleName() + ": " + safeDiagnostic(fallbackError.getMessage()));
                 throw fallbackError;
             }
         }''',
-        "recover malformed Gemini batches without bursting when quota-limited")
+        "recover malformed batches without retry burst on quota limit")
 
-    # The following edits are intentionally applied after patch_playhead_priority.py, which has
-    # already inserted the initial 180ms playhead-settle grace into this loop.
     rep(tr,
 '''    private static final long SEEK_DEBOUNCE_MS = 350;
     private static final Handler seekHandler = new Handler(Looper.getMainLooper());''',
@@ -195,25 +158,28 @@ def main():
 
         try {
             // Initial restore/deep-link position can arrive a few frames after newVideoLoaded.''',
-        "add per-session Gemini retry backoff")
+        "add Gemini retry backoff")
 
+    # Insert the rolling-horizon gate BEFORE the runtime-diagnostics patch anchor so that later
+    # diagnostics can still instrument the unchanged 'List<TranscriptSegment> batch ... int offset'.
     rep(tr,
-'''                List<TranscriptSegment> batch = batches.get(index);
-                int offset = 0;''',
-'''                List<TranscriptSegment> batch = batches.get(index);
+'''                firstBatchAfterReposition = false;
 
-                // Preserve whole-video context but only spend target-generation quota near the
-                // playhead. Seeking changes videoPositionHint, so opening at 40:00 immediately makes
-                // the 40:00 batch eligible without translating 0:00-39:59 first.
-                if (GeminiTranslator.isEnabled() && !batch.isEmpty()
-                        && batch.get(0).startMs > timeMs + GEMINI_TRANSLATION_HORIZON_MS) {
-                    try { Thread.sleep(750L); }
-                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return initial; }
-                    continue;
+                List<TranscriptSegment> batch = batches.get(index);''',
+'''                firstBatchAfterReposition = false;
+
+                if (GeminiTranslator.isEnabled()) {
+                    List<TranscriptSegment> candidateBatch = batches.get(index);
+                    if (!candidateBatch.isEmpty()
+                            && candidateBatch.get(0).startMs > timeMs + GEMINI_TRANSLATION_HORIZON_MS) {
+                        try { Thread.sleep(750L); }
+                        catch (InterruptedException e) { Thread.currentThread().interrupt(); return initial; }
+                        continue;
+                    }
                 }
 
-                int offset = 0;''',
-        "hold far-future Gemini batches until playhead approaches")
+                List<TranscriptSegment> batch = batches.get(index);''',
+        "hold far-future Gemini generation until playhead approaches")
 
     rep(tr,
 '''                if (abortTranslation) break;
@@ -221,8 +187,6 @@ def main():
                 applyBatch(working, batch, offset, translated, targetLang);''',
 '''                if (abortTranslation) break;
 
-                // Null from Gemini after all internal rescue attempts is retryable. Do not mark the
-                // batch done: wait out the provider's rate-limit window and let the same video heal.
                 if (translated == null && GeminiTranslator.isEnabled()) {
                     final int waitMs = geminiRetryBackoffMs;
                     SpanishStudyDiagnostics.record("GEMINI", "batch deferred; retry in " + waitMs
@@ -233,12 +197,10 @@ def main():
                     firstBatchAfterReposition = true;
                     continue;
                 }
-                if (translated != null && GeminiTranslator.isEnabled()) {
-                    geminiRetryBackoffMs = GEMINI_RETRY_MIN_MS;
-                }
+                if (translated != null && GeminiTranslator.isEnabled()) geminiRetryBackoffMs = GEMINI_RETRY_MIN_MS;
 
                 applyBatch(working, batch, offset, translated, targetLang);''',
-        "retry transient Gemini failures instead of completing null batch")
+        "retry transient Gemini failure without marking batch done")
 
     rep(tr,
 '''            if (ex instanceof FileNotFoundException
@@ -248,11 +210,9 @@ def main():
 '''            if (ex instanceof FileNotFoundException
                     || (msg != null && (msg.contains("402") || msg.contains("401") || msg.contains("403")
                     || (msg.contains("429") && !GeminiTranslator.isEnabled())))) {
-                // Gemini 429 is transient: the paced retry loop above handles it. Do not poison all
-                // remaining batches in this video. Other services retain upstream 429-abort behavior.
                 abortTranslation = true;
             }''',
-        "keep Gemini 429 retryable instead of aborting the video")
+        "keep Gemini 429 retryable")
 
     print("Gemini structured JSON and rolling quota recovery integration complete")
 
