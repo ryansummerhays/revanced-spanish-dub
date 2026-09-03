@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Make the Gemini settings dialog safe to open/save without changing anything.
+"""Make Gemini configuration/re-selection safe when nothing actually changed.
 
-Previously, tapping Save always called reloadTranscript(), even when the API key and model were
-unchanged. reloadTranscript() stops the active dub, clears the translated segment list/TTS state, and
-starts a fresh network translation pass. If Gemini is currently rate-limited or the fallback is slow,
-merely touching the settings dialog can therefore make a working dub appear to die.
+Previously, tapping Save in the Gemini settings dialog always called reloadTranscript(), even when the
+API key and model were unchanged. Re-tapping Gemini in the provider picker did the same. The upstream
+reload path stops the active dub, clears translated segments/TTS state, and starts a fresh network
+translation pass. If Gemini is rate-limited, merely touching settings can therefore make a working dub
+appear to die.
 
-v2.7.1 treats an unchanged Save as a true no-op. Whitespace-only edits are normalized away, and the
-current transcript/TTS state is preserved. A genuine key/model change still reloads so the new
-configuration takes effect. Diagnostics record only whether a setting changed, never the API key.
+v2.7.1 treats unchanged settings and re-selecting the already-active provider as true no-ops.
+Whitespace-only edits are normalized away. Genuine key/model/provider changes still reload so the new
+configuration takes effect. Diagnostics never expose the API key.
 """
 from pathlib import Path
 import sys
@@ -28,6 +29,7 @@ def main():
         raise SystemExit("usage: patch_safe_gemini_settings.py <morphe-root>")
     root = Path(sys.argv[1]).resolve()
     controller = root / "extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java"
+    picker = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/VotBottomSheet.java"
 
     rep(controller,
 '''        EditText key=new EditText(activity);
@@ -76,7 +78,6 @@ def main():
                     final boolean keyChanged=!originalGeminiKey.equals(enteredKey);
                     final boolean modelChanged=!originalGeminiModel.equals(enteredModel);
 
-                    // Merely opening/touching the dialog must never tear down a working dub.
                     if(!keyChanged&&!modelChanged){
                         SpanishStudyDiagnostics.record("SETTINGS","Gemini settings unchanged; active dub preserved");
                         Toast.makeText(activity,"Gemini settings unchanged",Toast.LENGTH_SHORT).show();
@@ -94,13 +95,64 @@ def main():
                 })''',
         "avoid destructive reload when Gemini settings are unchanged")
 
+    # patch_provider_picker.py has already wired this block. Re-selecting the current provider should
+    # simply close the picker rather than discarding a working transcript/TTS session.
+    rep(picker,
+'''                if (isGemini) {
+                    android.app.Activity activity = Utils.getActivity();
+                    if (!SpanishStudyController.hasGeminiApiKey(activity)) {
+                        pickerDialog.dismiss();
+                        SpanishStudyController.configureGemini(activity);
+                        return;
+                    }
+                    SpanishStudyController.setGeminiEnabled(activity, true);
+                    VoiceOverTranslationPatch.reloadTranscript();
+                    VotBottomSheet.show(context);
+                    pickerDialog.dismiss();
+                    return;
+                }''',
+'''                if (isGemini) {
+                    android.app.Activity activity = Utils.getActivity();
+                    if (!SpanishStudyController.hasGeminiApiKey(activity)) {
+                        pickerDialog.dismiss();
+                        SpanishStudyController.configureGemini(activity);
+                        return;
+                    }
+                    if (SpanishStudyController.isGeminiEnabled(activity)) {
+                        VotBottomSheet.show(context);
+                        pickerDialog.dismiss();
+                        return;
+                    }
+                    SpanishStudyController.setGeminiEnabled(activity, true);
+                    VoiceOverTranslationPatch.reloadTranscript();
+                    VotBottomSheet.show(context);
+                    pickerDialog.dismiss();
+                    return;
+                }''',
+        "avoid reload when Gemini provider is already selected")
+
+    rep(picker,
+'''                SpanishStudyController.setGeminiEnabled(Utils.getActivity(), false);
+                Settings.VOT_TRANSLATION_SERVICE.save(value);
+                VoiceOverTranslationPatch.reloadTranscript();''',
+'''                if (!SpanishStudyController.isGeminiEnabled(Utils.getActivity())
+                        && Settings.VOT_TRANSLATION_SERVICE.get().equals(value)) {
+                    VotBottomSheet.show(context);
+                    pickerDialog.dismiss();
+                    return;
+                }
+                SpanishStudyController.setGeminiEnabled(Utils.getActivity(), false);
+                Settings.VOT_TRANSLATION_SERVICE.save(value);
+                VoiceOverTranslationPatch.reloadTranscript();''',
+        "avoid reload when non-Gemini provider is already selected")
+
     # patch_diagnostics_version.py has already labeled the report v2.7.0 in this build chain.
     rep(controller,
 '''        report.append("Spanish Dub Study v2.7.0 diagnostics\\n");''',
 '''        report.append("Spanish Dub Study v2.7.1 diagnostics\\n");''',
         "label v2.7.1 diagnostics")
 
-    print("Safe Gemini settings integration complete")
+    print("Safe Gemini settings/provider integration complete")
 
 
 if __name__ == "__main__":
