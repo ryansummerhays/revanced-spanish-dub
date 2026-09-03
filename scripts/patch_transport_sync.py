@@ -53,15 +53,15 @@ def main() -> None:
     replace_once(
         tts,
         '''        Utils.runOnBackgroundThread(() -> {\n            try {\n                // playMp3 blocks until completion or error.''',
-        '''        transportPaused = false;\n        transportLastVideoMs = VideoInformation.getVideoTime();\n        transportLastAdvanceElapsedMs = SystemClock.elapsedRealtime();\n        scheduleTransportWatchdog();\n\n        Utils.runOnBackgroundThread(() -> {\n            try {\n                // playMp3 blocks until completion or error.''',
-        "start transport watchdog for every Edge playback",
+        '''        final VideoState sourceStateAtStart = VideoState.getCurrent();\n        transportPaused = sourceStateAtStart != null && sourceStateAtStart != VideoState.PLAYING;\n        transportLastVideoMs = VideoInformation.getVideoTime();\n        transportLastAdvanceElapsedMs = SystemClock.elapsedRealtime();\n        scheduleTransportWatchdog();\n\n        Utils.runOnBackgroundThread(() -> {\n            try {\n                // playMp3 blocks until completion or error.''',
+        "start transport watchdog without erasing an existing pause",
     )
 
     replace_once(
         tts,
         '''    /**\n     * Pauses the active MediaPlayer without releasing it so playback can resume from the\n     * same MP3 position. Audio focus and engine state are intentionally left untouched\n     * so resume() avoids the audio-ducking ramp delay that would clip the first frames.\n     */\n    void pause() {\n        Utils.verifyOnMainThread();\n        if (currentPlayer == null) return;\n        try {\n            currentPlayer.pause();\n        } catch (Exception ex) {\n            VoiceOverTranslationPatch.logError(() -> "MediaPlayer pause failed", ex);\n        }\n    }\n\n    /** Resumes a previously paused MediaPlayer. No-op if there is no active player. */\n    void resume() {\n        Utils.verifyOnMainThread();\n        if (currentPlayer == null) return;\n        try {\n            currentPlayer.start();\n        } catch (Exception ex) {\n            VoiceOverTranslationPatch.logError(() -> "MediaPlayer resume failed", ex);\n        }\n    }''',
-        '''    /**\n     * Pauses the active Edge MP3 in place. Idempotent so state callbacks and the independent\n     * transport watchdog may both request the same pause safely.\n     */\n    void pause() {\n        Utils.verifyOnMainThread();\n        if (transportPaused) return;\n        transportPaused = true;\n        if (currentPlayer == null) return;\n        try {\n            currentPlayer.pause();\n        } catch (Exception ex) {\n            VoiceOverTranslationPatch.logError(() -> "MediaPlayer pause failed", ex);\n        }\n    }\n\n    /** Resume the same MP3 position after YouTube itself is moving again. */\n    void resume() {\n        Utils.verifyOnMainThread();\n        if (!transportPaused) return;\n        transportPaused = false;\n        if (currentPlayer == null) return;\n        try {\n            currentPlayer.start();\n        } catch (Exception ex) {\n            VoiceOverTranslationPatch.logError(() -> "MediaPlayer resume failed", ex);\n        }\n    }''',
-        "make Edge pause/resume idempotent",
+        '''    /**\n     * Pauses the active Edge MP3 in place. Idempotent so state callbacks and the independent\n     * transport watchdog may both request the same pause safely. A pause is remembered even if\n     * synthesis has not finished yet, preventing a late MP3 from starting under a paused video.\n     */\n    void pause() {\n        Utils.verifyOnMainThread();\n        if (transportPaused) return;\n        transportPaused = true;\n        if (currentPlayer == null) return;\n        try {\n            currentPlayer.pause();\n        } catch (Exception ex) {\n            VoiceOverTranslationPatch.logError(() -> "MediaPlayer pause failed", ex);\n        }\n    }\n\n    /** Resume the same MP3 position after YouTube itself is moving again. */\n    void resume() {\n        Utils.verifyOnMainThread();\n        if (!transportPaused) return;\n        transportPaused = false;\n        if (currentPlayer == null) return;\n        try {\n            currentPlayer.start();\n        } catch (Exception ex) {\n            VoiceOverTranslationPatch.logError(() -> "MediaPlayer resume failed", ex);\n        }\n    }''',
+        "make Edge pause/resume idempotent and synthesis-race safe",
     )
 
     helpers = r'''
@@ -106,6 +106,16 @@ def main() -> None:
         "    /** Updates the active playback volume. No-op if there is no active player. */\n",
         helpers + "    /** Updates the active playback volume. No-op if there is no active player. */\n",
         "add source-clock transport watchdog",
+    )
+
+    # MediaPlayer is prepared on the main thread. Do not unconditionally start it if the user paused
+    # while an on-demand Edge synthesis was still in flight; it remains prepared and resume() starts
+    # that exact MP3 once the source clock moves again.
+    replace_once(
+        tts,
+        '''                if (startTimeMs > 0) {\n                    mp.seekTo((int) startTimeMs);\n                }\n                mp.start();''',
+        '''                if (startTimeMs > 0) {\n                    mp.seekTo((int) startTimeMs);\n                }\n                final VideoState sourceStateNow = VideoState.getCurrent();\n                if (!transportPaused\n                        && (sourceStateNow == null || sourceStateNow == VideoState.PLAYING)) {\n                    mp.start();\n                } else {\n                    transportPaused = true;\n                    Logger.printDebug(() -> "Edge MP3 prepared while source transport is paused; waiting to resume");\n                }''',
+        "never start late-synthesized Edge audio under a paused video",
     )
 
     replace_once(
