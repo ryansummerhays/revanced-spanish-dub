@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Prefer audiovisual Gemini grounding for each progressive batch, with text-only fallback."""
+"""Run audiovisual Gemini grounding as a non-blocking sidecar.
+
+The first v2.6 implementation synchronously tried YouTube-video grounding before every text translation
+batch. Even though it had a text-only fallback, a slow/unsupported video request could consume the
+whole audible window before fallback returned, making Spanish appear completely dead. Basic Spanish
+translation must never depend on the experimental multimodal path.
+"""
 from __future__ import annotations
 
 import sys
@@ -27,11 +33,11 @@ def main() -> None:
     replace_once(
         gemini,
         '''        if (segments == null || segments.isEmpty()) return new ArrayList<>();\n\n        PreparedTranscript prepared = prepared(videoId, targetLang);''',
-        '''        if (segments == null || segments.isEmpty()) return new ArrayList<>();\n\n        // v2.6: First try Gemini's public-YouTube audiovisual path. It can listen to the\n        // actual voice at these immutable timestamps, correct unclear ASR words with real audio/\n        // video context, and assign conservative speaker labels. If the preview endpoint, model,\n        // video visibility, quota, or validation fails, return null and continue through the proven\n        // transcript-only Gemini path below.\n        List<String> audiovisual = GeminiVideoGrounding.translateBatch(videoId, segments, targetLang);\n        if (audiovisual != null && audiovisual.size() == segments.size()) return audiovisual;\n\n        PreparedTranscript prepared = prepared(videoId, targetLang);''',
-        "prefer audiovisual grounding with safe text-only fallback",
+        '''        if (segments == null || segments.isEmpty()) return new ArrayList<>();\n\n        // v2.6.1 reliability invariant: experimental audiovisual ASR/speaker grounding is SIDE DATA.\n        // It may improve corrected English and speaker labels later, but it can never delay the\n        // ordinary text-only translation that subtitles/TTS need right now. One bounded background\n        // sidecar is scheduled opportunistically and this method immediately continues below.\n        GeminiVideoGroundingSidecar.schedule(videoId, segments, targetLang);\n\n        PreparedTranscript prepared = prepared(videoId, targetLang);''',
+        "make audiovisual grounding asynchronous and non-blocking",
     )
 
-    print("Audiovisual Gemini progressive delegate integration complete")
+    print("Non-blocking audiovisual Gemini sidecar integration complete")
 
 
 if __name__ == "__main__":
