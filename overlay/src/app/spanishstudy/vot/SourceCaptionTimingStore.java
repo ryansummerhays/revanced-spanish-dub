@@ -56,6 +56,27 @@ public final class SourceCaptionTimingStore {
     }
 
     /**
+     * Returns the measured silence after each lexical word in {@code sentenceText}, aligned to the
+     * preserved JSON3 word timeline. This is the local prosody signal used by v2.11 punctuation
+     * restoration. A null result means alignment was not reliable enough and callers must fall back
+     * to text-only parsing.
+     */
+    public static synchronized long[] interWordGaps(long sentenceStartMs,
+                                                     long sentenceEndMs,
+                                                     String sentenceText) {
+        Alignment alignment = alignSentence(sentenceStartMs, sentenceEndMs, sentenceText);
+        if (alignment == null || alignment.words.size() < 2) return null;
+
+        long[] gaps = new long[alignment.words.size() - 1];
+        for (int i = 0; i < gaps.length; i++) {
+            TimedWord left = alignment.candidates.get(alignment.aligned[i]);
+            TimedWord right = alignment.candidates.get(alignment.aligned[i + 1]);
+            gaps[i] = Math.max(0L, right.startMs - left.endMs);
+        }
+        return gaps;
+    }
+
+    /**
      * @return an end timestamp for every phrase, or null when source-word alignment is not reliable.
      * The final timestamp is always sentenceEndMs. Returned boundaries are strictly increasing.
      */
@@ -65,8 +86,8 @@ public final class SourceCaptionTimingStore {
                                                      List<String> phrases) {
         if (phrases == null || phrases.size() < 2 || sentenceEndMs <= sentenceStartMs) return null;
 
-        List<String> sentenceWords = lexicalWords(sentenceText);
-        if (sentenceWords.size() < phrases.size()) return null;
+        Alignment alignment = alignSentence(sentenceStartMs, sentenceEndMs, sentenceText);
+        if (alignment == null || alignment.words.size() < phrases.size()) return null;
 
         List<String> flattened = new ArrayList<>();
         int[] cumulativeWords = new int[phrases.size()];
@@ -76,7 +97,30 @@ public final class SourceCaptionTimingStore {
             flattened.addAll(part);
             cumulativeWords[i] = flattened.size();
         }
-        if (!flattened.equals(sentenceWords)) return null;
+        if (!flattened.equals(alignment.words)) return null;
+
+        long[] ends = new long[phrases.size()];
+        long previous = sentenceStartMs;
+        for (int i = 0; i < phrases.size() - 1; i++) {
+            int wordCount = cumulativeWords[i];
+            if (wordCount <= 0 || wordCount >= alignment.aligned.length) return null;
+            TimedWord left = alignment.candidates.get(alignment.aligned[wordCount - 1]);
+            TimedWord right = alignment.candidates.get(alignment.aligned[wordCount]);
+            long boundary;
+            if (right.startMs > left.endMs) boundary = (left.endMs + right.startMs) / 2L;
+            else boundary = Math.max(left.endMs, right.startMs);
+            boundary = Math.max(previous + 1L, Math.min(sentenceEndMs - 1L, boundary));
+            ends[i] = boundary;
+            previous = boundary;
+        }
+        ends[ends.length - 1] = sentenceEndMs;
+        return ends;
+    }
+
+    private static Alignment alignSentence(long sentenceStartMs, long sentenceEndMs, String sentenceText) {
+        if (sentenceEndMs <= sentenceStartMs) return null;
+        List<String> sentenceWords = lexicalWords(sentenceText);
+        if (sentenceWords.isEmpty()) return null;
 
         List<TimedWord> candidates = new ArrayList<>();
         final long toleranceMs = 120L;
@@ -109,23 +153,7 @@ public final class SourceCaptionTimingStore {
             candidateAt = found + 1;
         }
         if (skipped > Math.max(3, sentenceWords.size() / 4)) return null;
-
-        long[] ends = new long[phrases.size()];
-        long previous = sentenceStartMs;
-        for (int i = 0; i < phrases.size() - 1; i++) {
-            int wordCount = cumulativeWords[i];
-            if (wordCount <= 0 || wordCount >= aligned.length) return null;
-            TimedWord left = candidates.get(aligned[wordCount - 1]);
-            TimedWord right = candidates.get(aligned[wordCount]);
-            long boundary;
-            if (right.startMs > left.endMs) boundary = (left.endMs + right.startMs) / 2L;
-            else boundary = Math.max(left.endMs, right.startMs);
-            boundary = Math.max(previous + 1L, Math.min(sentenceEndMs - 1L, boundary));
-            ends[i] = boundary;
-            previous = boundary;
-        }
-        ends[ends.length - 1] = sentenceEndMs;
-        return ends;
+        return new Alignment(sentenceWords, candidates, aligned);
     }
 
     private static List<String> lexicalWords(String text) {
@@ -145,4 +173,5 @@ public final class SourceCaptionTimingStore {
 
     private record Match(String token, int start, int end) {}
     private record TimedWord(String token, long startMs, long endMs) {}
+    private record Alignment(List<String> words, List<TimedWord> candidates, int[] aligned) {}
 }
