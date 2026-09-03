@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.5.3 patch bundle
+name: Build Spanish Dub Study v2.6.0 patch bundle
 
 on:
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.NaturalProsodyFormatterTest
           java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
 
-      - name: Apply Spanish study v2.5.3 overlay
+      - name: Apply Spanish study v2.6.0 overlay
         run: |
           python3 scripts/apply_overlay.py upstream overlay/src
           python3 scripts/patch_provider_picker.py upstream
@@ -72,6 +72,8 @@ jobs:
           python3 scripts/patch_autodub_timeline.py upstream
           python3 scripts/patch_quickstart_gemini.py upstream
           python3 scripts/patch_long_video_startup.py upstream
+          python3 scripts/patch_video_grounding_delegate.py upstream
+          python3 scripts/patch_playhead_priority.py upstream
           python3 scripts/patch_autostart_session.py upstream
           python3 scripts/patch_live_speech_rate.py upstream
           python3 scripts/patch_translation_language_guard.py upstream
@@ -83,6 +85,8 @@ jobs:
           python3 scripts/patch_study_transport_tools.py upstream
           python3 scripts/patch_bounded_prefetch_window.py upstream
           python3 scripts/patch_subtitle_study_gestures.py upstream
+          python3 scripts/patch_speaker_ui.py upstream
+          python3 scripts/patch_speaker_voices.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -92,7 +96,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :patches:buildAndroid --no-daemon
 
-      - name: Rebrand and package v2.5.3 bundle
+      - name: Rebrand and package v2.6.0 bundle
         run: |
           mkdir -p dist
           python3 - <<'PY'
@@ -101,8 +105,8 @@ jobs:
           if len(srcs) != 1:
               raise SystemExit(f'Expected one MPP, found {srcs}')
           src = srcs[0]
-          dst = 'dist/spanish-dub-study-patches-v2.5.3.mpp'
-          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.5.3\nDescription: Non-destructive live max-speech-rate fix on top of v2.5.2. Changing the max speech-rate slider no longer stops the current dub, sets an explicit-seek flag, resets the spoken index, restarts dispatch, reloads translation state, or mutates subtitle events. Lowering the max can clamp an active Edge MediaPlayer in place; raising the max applies naturally to subsequently scheduled phrases rather than abruptly accelerating speech already in progress. Android System TTS adopts the new ceiling on the next phrase. Prefetched Edge audio remains valid because cached MP3s are synthesized at natural speed and the rate ceiling is applied only at playback. Long-video quick-start, phrase-start preservation, transport pause/resume synchronization, bounded in-memory TTS buffering, grounded Gemini validation/back-translation, JSON3 source-word timing, natural phrase segmentation and study replay controls are retained. Full videos are not cached to disk. Based on Morphe 1.41.0\nVersion: 2.5.3\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          dst = 'dist/spanish-dub-study-patches-v2.6.0.mpp'
+          manifest = f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.6.0\nDescription: Audiovisual grounding, conservative speaker-aware dubbing, and strict playhead-first long-video startup. Gemini may inspect a tightly clipped window of the actual public YouTube video around the current subtitle batch so poorly enunciated auto-caption words, niche jargon, names, acronyms and slang can be corrected using real audio, sentence context and visible video context rather than transcript text alone. Grounded corrections remain conservative side data and Spanish still passes source-echo, language/spacing/anchor and independent back-translation validation. Confirmed speakers are labeled A-H in the bilingual subtitle pair and can receive stable alternate native Spanish Edge voices; uncertain voice changes retain the established speaker rather than reacting to yelling, whispering or prosody changes. No microphone or room-audio capture is used. Translation startup now seeds the dispatcher from the actual current video clock, waits briefly for restored/deep-link position to settle, always chooses the batch under the playhead first, and reprioritizes non-streaming Gemini after seeks. Gemini video grounding uses static start/end clipping so opening a 50+ minute video at 40:00 processes only the local current window instead of preceding video. Existing v2.5.3 non-destructive speech-rate updates, pause/resume transport sync, phrase-start preservation, bounded in-memory TTS buffering, source-word timing and natural phrase segmentation are retained. Full videos are never cached to disk. Based on Morphe 1.41.0\nVersion: 2.6.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src, 'r') as zin, zipfile.ZipFile(dst, 'w') as zout:
               for info in zin.infolist():
                   data = manifest if info.filename == 'META-INF/MANIFEST.MF' else zin.read(info.filename)
@@ -117,7 +121,7 @@ jobs:
       - name: Upload custom patch bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.5.3
+          name: spanish-dub-study-patches-v2.6.0
           path: dist/
           if-no-files-found: error
           retention-days: 30
