@@ -86,11 +86,12 @@ final class SpeakerAssignmentStore {
         return a==null?"":a.label;
     }
 
+    /** -1 means no trustworthy speaker label has been committed yet. */
     static synchronized int speakerIndex(TranscriptSegment seg){
         String label=speakerLabel(seg);
-        if(label.isEmpty())return 0;
+        if(label.isEmpty())return -1;
         char c=label.charAt(0);
-        return c>='A'&&c<='H'?c-'A':0;
+        return c>='A'&&c<='H'?c-'A':-1;
     }
 
     static synchronized String rosterPrompt(){
