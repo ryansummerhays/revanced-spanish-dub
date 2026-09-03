@@ -35,10 +35,6 @@ def main():
     if not gemini.is_file():
         raise RuntimeError(f"Required source missing: {gemini}")
 
-    # This request is translation + constrained JSON, not a reasoning task. Gemini 3.5 Flash defaults
-    # to medium thinking; on a small maxOutputTokens budget hidden thinking can consume most of the
-    # allowance before the visible JSON is complete. Use the lowest supported effort and a large
-    # visible-output ceiling so the JSON object can actually finish.
     rep(gemini,
 '''        JSONObject generationConfig = new JSONObject()
                 .put("responseMimeType", "application/json")
@@ -49,16 +45,10 @@ def main():
 '''        JSONObject generationConfig = new JSONObject()
                 .put("responseMimeType", "application/json")
                 .put("responseJsonSchema", arraySchema)
-                // Translation/JSON emission is a latency-sensitive constrained task. Keep reasoning
-                // minimal so hidden thinking cannot consume the visible structured-output budget.
                 .put("thinkingConfig", new JSONObject().put("thinkingLevel", "minimal"))
-                // A truncated JSON object is unusable. This ceiling is intentionally generous; the
-                // schema and requested ID count still bound the actual response size.
                 .put("maxOutputTokens", Math.max(4096, (end - start) * 400));''',
         "use minimal thinking and generous structured-output budget")
 
-    # Capture finish reason and usage before JSON parsing. This turns a vague JSONException into an
-    # actionable diagnosis and also catches future service-side truncation regressions.
     rep(gemini,
 '''        JSONObject content = candidates.getJSONObject(0).optJSONObject("content");
         JSONArray parts = content == null ? null : content.optJSONArray("parts");
@@ -66,14 +56,14 @@ def main():
 
         String jsonText = parts.getJSONObject(0).optString("text", "").trim();
         JSONArray arr = new JSONArray(jsonText);''',
-'''        JSONObject candidate = candidates.getJSONObject(0);
-        String finishReason = candidate.optString("finishReason", "");
+'''        JSONObject responseCandidate = candidates.getJSONObject(0);
+        String finishReason = responseCandidate.optString("finishReason", "");
         JSONObject usage = root.optJSONObject("usageMetadata");
         String usageSummary = usage == null ? "" : (" prompt=" + usage.optInt("promptTokenCount", -1)
                 + " output=" + usage.optInt("candidatesTokenCount", -1)
                 + " thoughts=" + usage.optInt("thoughtsTokenCount", -1)
                 + " total=" + usage.optInt("totalTokenCount", -1));
-        JSONObject content = candidate.optJSONObject("content");
+        JSONObject content = responseCandidate.optJSONObject("content");
         JSONArray parts = content == null ? null : content.optJSONArray("parts");
         if (parts == null || parts.length() == 0) {
             throw new Exception("Gemini returned no text finish=" + finishReason + usageSummary);
@@ -91,9 +81,6 @@ def main():
         }''',
         "diagnose malformed/truncated structured JSON")
 
-    # v2.6.2 already logs the primary failure and then tries Google. Insert a Gemini-first recovery
-    # path: retry each requested event independently. This costs more requests only after a failed
-    # multi-event response, but avoids total dub failure when Google fallback is rate-limited.
     rep(gemini,
 '''        } catch (Exception ex) {
             SpanishStudyDiagnostics.record("GEMINI", "primary failed model="
@@ -118,10 +105,6 @@ def main():
                     + SpanishStudyPrefs.geminiModel(Utils.getContext()) + " "
                     + ex.getClass().getSimpleName() + ": " + safeDiagnostic(ex.getMessage()));
 
-            // Do not immediately hand the entire audible region to a public Google-translate
-            // fallback that may be rate-limited. First retry Gemini in one-event requests. A single
-            // subtitle needs very little structured output and is much harder to truncate; each
-            // retry still gets the same global/local context and the same alignment validation.
             try {
                 List<String> recovered = new ArrayList<>(segments.size());
                 if (start >= 0) {
