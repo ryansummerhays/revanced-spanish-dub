@@ -101,6 +101,7 @@ jobs:
           python3 scripts/patch_v290_full_pipeline_audit.py upstream
           python3 scripts/audit_v290_pipeline.py upstream
           python3 scripts/patch_v291_caption_recovery.py upstream
+          python3 scripts/patch_v291_compile_escape_fix.py upstream
           python3 scripts/audit_v291_caption_recovery.py upstream
 
       - name: Build Morphe patch bundle
