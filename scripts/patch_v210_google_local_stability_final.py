@@ -18,8 +18,6 @@ def replace_method(path: Path, signature: str, replacement: str, label: str):
     start = text.find(signature)
     if start < 0:
         raise RuntimeError(f"{label}: signature not found in {path}")
-    # All target methods here are followed by a Javadoc block. Replacing to that boundary avoids
-    # depending on the exact post-v2.9 method body.
     end = text.find("\n    /**", start)
     if end < 0:
         raise RuntimeError(f"{label}: following Javadoc boundary not found in {path}")
@@ -35,6 +33,7 @@ def main():
     study = root / "extensions/youtube/src/main/java/app/spanishstudy/vot"
     votpkg = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation"
     translator = votpkg / "TranscriptTranslator.java"
+    picker = votpkg / "VotBottomSheet.java"
     controller = study / "SpanishStudyController.java"
     gemini = study / "GeminiTranslator.java"
     ground = study / "GeminiVideoGroundingSidecar.java"
@@ -43,8 +42,8 @@ def main():
     tts = votpkg / "TtsEngine.java"
     prefetcher = votpkg / "TtsPrefetcher.java"
 
-    # Google is the effective translator regardless of the legacy/global provider selector. We do
-    # not mutate the saved setting; future experimental builds can restore provider choice cleanly.
+    # Stable translation path: only Google. Preserve the saved global Morphe preference rather than
+    # silently rewriting another setting, but this Spanish Dub Study runtime ignores other providers.
     rep(translator,
 '''        String service = Settings.VOT_TRANSLATION_SERVICE.get();
         final boolean isMyMemory = service.equals(TRANSLATION_SERVICE_MY_MEMORY);
@@ -55,8 +54,8 @@ def main():
         final boolean isOpenRouter = false;''',
         "force effective translation provider to Google")
 
-    # Hard-disable every Gemini entry point that can produce a network request. Stored credentials
-    # remain untouched so later experimental builds do not require re-entry.
+    # Hard-disable every Gemini entry point capable of making an API request. Credentials remain on
+    # disk only for a future explicitly experimental build.
     replace_method(gemini,
         "    public static boolean isEnabled() {",
 '''    public static boolean isEnabled() {
@@ -80,8 +79,25 @@ def main():
         if (true) return;''',
         "hard-disable Gemini speaker diarization")
 
-    # Diagnostics: add authoritative mode lines and relabel the version. Existing historical fields
-    # may remain for migration/debugging, but these lines state the effective runtime unambiguously.
+    # Provider picker should agree with the runtime. Remove the old Gemini option and ensure a stale
+    # Gemini preference cannot make the row *look* like Gemini is active.
+    ptext = picker.read_text(encoding="utf-8")
+    ptext = ptext.replace("SpanishStudyController.isGeminiEnabled(Utils.getActivity())", "false")
+    old_entry = '''                str("morphe_vot_service_openrouter"),
+                "Gemini"'''
+    new_entry = '''                str("morphe_vot_service_openrouter")'''
+    if old_entry not in ptext:
+        raise RuntimeError("stable provider picker: Gemini entry anchor not found")
+    ptext = ptext.replace(old_entry, new_entry, 1)
+    old_values = '''{ TRANSLATION_SERVICE_GOOGLE, TRANSLATION_SERVICE_MY_MEMORY, TRANSLATION_SERVICE_OPENROUTER, "gemini" }'''
+    new_values = '''{ TRANSLATION_SERVICE_GOOGLE, TRANSLATION_SERVICE_MY_MEMORY, TRANSLATION_SERVICE_OPENROUTER }'''
+    if old_values not in ptext:
+        raise RuntimeError("stable provider picker: Gemini values anchor not found")
+    ptext = ptext.replace(old_values, new_values, 1)
+    picker.write_text(ptext, encoding="utf-8")
+    print("patched: hide Gemini provider from stable picker")
+
+    # Diagnostics: authoritative runtime state, independent of stale saved preferences.
     rep(controller,
 '''        report.append("Spanish Dub Study v2.9.1 diagnostics\\n");''',
 '''        report.append("Spanish Dub Study v2.10.0 diagnostics\\n");
@@ -98,31 +114,36 @@ def main():
     controller.write_text(text, encoding="utf-8")
     print("patched: clarify disabled remote analysis in diagnostics")
 
-    # Make the study UI stop presenting quota-consuming features as active. Preferences are retained
-    # but the runtime no-ops them, and the labels clearly mark them as future work.
+    # UI cleanup must only touch user-visible string literals; never globally replace the word
+    # 'Gemini', because doing so can rename Java symbols such as configureGemini().
     text = sheet.read_text(encoding="utf-8")
-    text = text.replace("Gemini", "Advanced analysis (future)")
-    text = text.replace("Use video/audio context", "Video/audio context (future)")
-    text = text.replace("Recognize different speakers", "Speaker recognition (future)")
-    text = text.replace("Different Spanish voice per speaker", "Per-speaker Spanish voices (future)")
-    text = text.replace("Gemini may inspect the public YouTube video around the current phrase to correct unclear auto-captions and jargon",
-                        "Disabled in the stable build; future local/experimental analysis")
-    text = text.replace("Conservative voice identity; uncertain changes keep the established speaker",
-                        "Disabled until a lightweight local source-audio pipeline is ready")
-    text = text.replace("Uses stable alternate Spanish voices for confirmed speakers",
-                        "Disabled until local speaker recognition is available")
+    text = text.replace('"Gemini settings"', '"Advanced analysis (future)"')
+    text = text.replace('geminiRow.setOnClickListener(v->SpanishStudyController.configureGemini(activity));',
+                        'geminiRow.setOnClickListener(v->Toast.makeText(activity,"Cloud analysis is disabled in this stable build",Toast.LENGTH_SHORT).show());')
+    text = text.replace('"Use video/audio context"', '"Video/audio context (future)"')
+    text = text.replace('"Recognize different speakers"', '"Speaker recognition (future)"')
+    text = text.replace('"Different Spanish voice per speaker"', '"Per-speaker Spanish voices (future)"')
+    text = text.replace('"Gemini may inspect the public YouTube video around the current phrase to correct unclear auto-captions and jargon"',
+                        '"Disabled in the stable build; planned as lightweight local frame analysis"')
+    text = text.replace('"Conservative voice identity; uncertain changes keep the established speaker"',
+                        '"Disabled until a lightweight local source-audio pipeline is proven"')
+    text = text.replace('"Uses stable alternate Spanish voices for confirmed speakers"',
+                        '"Disabled until local speaker recognition is available"')
+    # Render legacy analysis switches off even if an older build left their preferences enabled.
+    text = text.replace('SpanishStudyPrefs.videoGroundingEnabled(activity)', 'false')
+    text = text.replace('SpanishStudyPrefs.speakerRecognitionEnabled(activity)', 'false')
+    text = text.replace('SpanishStudyPrefs.speakerVoicesEnabled(activity)', 'false')
     sheet.write_text(text, encoding="utf-8")
-    print("patched: mark remote-analysis UI as future")
+    print("patched: stable analysis UI labels and effective-off state")
 
-    # Edge TTS starvation: one failed synthesis previously held the single serialized WebSocket for
-    # up to two 20-second read timeouts, draining the ready buffer. Eight seconds still gives normal
-    # Edge synthesis ample room while bounding a bad request to ~16s across two socket attempts.
+    # Edge TTS starvation: a failed synthesis previously held the single serialized WebSocket for
+    # up to two 20-second read timeouts. Bound each read to 8s and cool a failed phrase so prefetch
+    # can move on to later phrases instead of selecting the same missing event forever.
     rep(tts,
 '''    private static final int READ_TIMEOUT_MS    = 20_000;''',
 '''    private static final int READ_TIMEOUT_MS    = 8_000;''',
         "shorten Edge synthesis read timeout")
 
-    # A failed current/future phrase must not immediately win current-first prefetch again forever.
     rep(prefetcher,
 '''import java.util.ArrayList;
 import java.util.Collections;''',
@@ -168,7 +189,6 @@ import app.spanishstudy.vot.SpanishStudyDiagnostics;''',
             failedUntilByIndex.clear();''',
         "clear failed cooldowns on reset")
 
-    # Current segment pass.
     rep(prefetcher,
 '''                if (!TranscriptFetcher.isSpokenLanguageDifferent(lang, seg.lang)
                         && TtsCache.notCached(videoId, i, voice, lang, seg.text)) {''',
@@ -177,7 +197,6 @@ import app.spanishstudy.vot.SpanishStudyDiagnostics;''',
                         && TtsCache.notCached(videoId, i, voice, lang, seg.text)) {''',
         "skip cooled current phrase")
 
-    # Speaker-aware future and past passes are the final post-v2.7 shape.
     rep(prefetcher,
 '''                String candidateVoice = VoiceOverTranslationPatch.resolveVoiceForSegment(seg, lang);
                 if (candidateVoice != null && TtsCache.notCached(videoId, i, candidateVoice, lang, seg.text)) {
