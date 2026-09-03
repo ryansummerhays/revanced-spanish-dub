@@ -51,12 +51,7 @@ def main():
         return voices.get(0).id;
     }
 
-    /**
-     * Stable alternate voice for a confirmed speaker. Speaker A keeps the user's normal preferred
-     * voice. Later speakers choose a distinct native voice in the same language. We intentionally
-     * do not infer gender or identity from the source voice; this is just an audible person-to-person
-     * distinction. Multilingual fallback voices are skipped while native voices are available.
-     */
+    /** Stable alternate native voice for a confirmed speaker; no gender/identity inference. */
     @Nullable
     static String resolveSpeakerVariant(String lang, @Nullable String preferredVoiceId, int speakerIndex) {
         final String base = resolve(lang, preferredVoiceId);
@@ -64,17 +59,11 @@ def main():
         final String iso = getIso639(lang);
         List<Voice> all = VOICES_BY_LANG.get(iso);
         if (all == null || all.isEmpty()) return base;
-
         ArrayList<Voice> nativeVoices = new ArrayList<>();
         for (Voice v : all) if (v.languageTag.equalsIgnoreCase(iso)) nativeVoices.add(v);
         if (nativeVoices.size() <= 1) return base;
-
         int baseIndex = 0;
-        for (int i = 0; i < nativeVoices.size(); i++) {
-            if (nativeVoices.get(i).id.equals(base)) { baseIndex = i; break; }
-        }
-        // A relatively prime-ish stride spreads nearby speaker IDs across the catalog instead of
-        // merely choosing nearly identical adjacent regional voices.
+        for (int i = 0; i < nativeVoices.size(); i++) if (nativeVoices.get(i).id.equals(base)) { baseIndex = i; break; }
         int stride = Math.max(1, nativeVoices.size() / 3);
         while (gcd(stride, nativeVoices.size()) != 1 && stride < nativeVoices.size()) stride++;
         int idx = Math.floorMod(baseIndex + speakerIndex * stride, nativeVoices.size());
@@ -116,30 +105,16 @@ def main():
                 : VoiceCatalog.resolve(lang, Settings.VOT_TTS_VOICE_TYPE.get());
     }
 
-    /** Package-visible so TtsPrefetcher uses the same voice that playback will actually request. */
+    /** Package-visible so TtsPrefetcher uses the same voice playback will request. */
     static String resolveVoiceForSegment(TranscriptSegment seg, String lang) {
         String base = resolveVoice(lang);
         if (base == null || TTS_ENGINE_SYSTEM.equals(base)) return base;
-        android.content.Context context = Utils.getContext();
-        if (context == null || !app.spanishstudy.vot.SpanishStudyPrefs.speakerVoicesEnabled(context)) return base;
+        if (!SpanishStudyController.speakerVoicesEnabled()) return base;
         int speaker = SpanishStudyController.speakerIndex(seg);
         if (speaker < 0) return base;
         return VoiceCatalog.resolveSpeakerVariant(lang, Settings.VOT_TTS_VOICE_TYPE.get(), speaker);
     }''',"shared speaker-aware voice resolver")
 
-    rep(pf,
-'''            String voiceLang = VoiceOverTranslationPatch.resolveTargetLang();
-            String voice = VoiceCatalog.resolve(voiceLang, Settings.VOT_TTS_VOICE_TYPE.get());
-
-            if (voice == null) {''',
-'''            String voiceLang = VoiceOverTranslationPatch.resolveTargetLang();
-            // The selected voice may differ per confirmed speaker, so choose the next segment first
-            // with a provisional base voice and then resolve that exact segment's stable variant.
-            String voice = VoiceCatalog.resolve(voiceLang, Settings.VOT_TTS_VOICE_TYPE.get());
-
-            if (voice == null) {''',"document speaker-aware prefetch setup")
-
-    # Replace the fetch call so the actual segment-specific voice is used in cache keys/synthesis.
     rep(pf,
 '''                final boolean success = fetch(videoId, segments.get(next.index),
                         next.index, segments.size(), voice, voiceLang);''',
@@ -148,8 +123,6 @@ def main():
                 final boolean success = segmentVoice != null && fetch(videoId, nextSegment,
                         next.index, segments.size(), segmentVoice, voiceLang);''',"speaker-aware prefetch synthesis")
 
-    # findNextToFetch currently checks cache using only the base voice; speaker variants would look
-    # perpetually uncached. Resolve each candidate before checking.
     rep(pf,
 '''                if (TtsCache.notCached(videoId, i, voice, lang, seg.text)) {
                     return new NextFetch(i, i - firstFutureIndex, seg);
