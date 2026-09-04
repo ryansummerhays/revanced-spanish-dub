@@ -60,8 +60,7 @@ def main() -> None:
         '''            String rawTranslatedText = translated.get(j);\n            String translatedText = DubTextSanitizer.cleanForSpeech(rawTranslatedText);\n            if (translatedText == null) {\n                SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "drop final slot=" + (offset + j));\n                continue;\n            }\n            if (rawTranslatedText == null || !translatedText.equals(rawTranslatedText)) {\n                SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "clean final slot=" + (offset + j));\n            }\n            if (lang != null''',
         "sanitize every final provider result before transcript publication")
 
-    # Streamed OpenRouter updates used to bypass applyBatch(). There are two callback loops with
-    # slightly different source-placeholder shapes; clean each one independently.
+    # Streamed OpenRouter updates bypass applyBatch(), so clean both callback loops independently.
     replace_in_method(
         translator,
         "private static Consumer<List<String>> streamCallback(",
@@ -108,6 +107,23 @@ def main() -> None:
         '''                + " unique=" + uniqueMatched + " provider=" + routedProvider\n                + " finish=" + finishReason + " maxTokens=" + maxOutputTokens\n                + " cost=" + usageCostUsd);''',
         "log finish reason per OpenRouter request")
 
+    # An unterminated line on a length-limited stream is precisely the unsafe case seen in v2.15.2.
+    # Do not publish the tail, and fail the subrequest closed so it is retried/recovered.
+    replace_in_method(
+        translator,
+        "private static List<String> translateBatchOpenRouterSingle(",
+        "\n    static void fetchOpenRouterModelCost",
+        '''                if (lineBuffer.length() > 0) {''',
+        '''                if (lineBuffer.length() > 0 && !"length".equalsIgnoreCase(finishReason)) {''',
+        "suppress unterminated length-truncated OpenRouter tail")
+    replace_in_method(
+        translator,
+        "private static List<String> translateBatchOpenRouterSingle(",
+        "\n    static void fetchOpenRouterModelCost",
+        '''        if (matchedFirst != segmentSize) {''',
+        '''        if ("length".equalsIgnoreCase(finishReason)) {\n            SpanishStudyDiagnostics.record("OPENROUTER-PARSE", "reject length-truncated id=" + requestId\n                    + " matched=" + matchedFirst + "/" + segmentSize);\n            throw new Exception("OpenRouter output truncated at max token budget");\n        }\n\n        if (matchedFirst != segmentSize) {''',
+        "reject length-truncated OpenRouter response")
+
     # ---- Last-resort TTS firewall -------------------------------------------------------------
     rep(vot,
         "import app.morphe.extension.youtube.shared.VideoState;\n",
@@ -118,56 +134,8 @@ def main() -> None:
         "private static void speak(TranscriptSegment seg, int index)",
         "\n    private static void triggerNextSegmentCheck()",
         '''        Logger.printDebug(() -> "Speak: " + seg);\n        String lang = resolveTargetLang();''',
-        '''        Logger.printDebug(() -> "Speak: " + seg);\n        final String speechText = DubTextSanitizer.cleanForSpeech(seg.text);\n        if (speechText == null) {\n            SpanishStudyDiagnostics.record("TTS-SANITIZE", "blocked protocol-only text index=" + index);\n            triggerNextSegmentCheck();\n            return;\n        }\n        if (!speechText.equals(seg.text)) {\n            SpanishStudyDiagnostics.record("TTS-SANITIZE", "cleaned residual metadata index=" + index);\n        }\n        String lang = resolveTargetLang();''',
-        "add final TTS protocol-metadata firewall")
-
-    # Use sanitized text for every actual synthesis/cache operation in speak().
-    text, start, end, section = method_section(
-        vot,
-        "private static void speak(TranscriptSegment seg, int index)",
-        "\n    private static void triggerNextSegmentCheck()")
-    replacements = {
-        "tts.speak(seg.text, TextToSpeech.QUEUE_FLUSH": "tts.speak(speechText, TextToSpeech.QUEUE_FLUSH",
-        "TtsCache.get(currentVideoId, index, voice, lang, seg.text)": "TtsCache.get(currentVideoId, index, voice, lang, speechText)",
-        "ttsEngine.prefetch(seg.text, voice, lang)": "ttsEngine.prefetch(speechText, voice, lang)",
-        "TtsCache.put(videoIdSnapshot, index, voice, lang, seg.text, data)": "TtsCache.put(videoIdSnapshot, index, voice, lang, speechText, data)",
-    }
-    for old, new in replacements.items():
-        if section.count(old) != 1:
-            raise RuntimeError(f"TTS sanitized-text anchor missing: {old}")
-        section = section.replace(old, new, 1)
-    vot.write_text(text[:start] + section + text[end:], encoding="utf-8")
-    print("patched: synthesize/cache only sanitized dub text")
-
-    # Accurate rate estimate/cache duration must use the same sanitized text that will be spoken.
-    replace_in_method(
-        vot,
-        "private static long getSpeechDurationMs(",
-        "\n    /**\n     * Estimates natural speech duration",
-        '''private static long getSpeechDurationMs(TranscriptSegment seg, int index, String voice, String lang) {''',
-        '''private static long getSpeechDurationMs(TranscriptSegment seg, int index, String voice, String lang, String speechText) {''',
-        "pass sanitized text into duration lookup")
-    replace_in_method(
-        vot,
-        "private static long getSpeechDurationMs(",
-        "\n    /**\n     * Estimates natural speech duration",
-        '''TtsCache.getDuration(currentVideoId, index, voice, lang, seg.text)''',
-        '''TtsCache.getDuration(currentVideoId, index, voice, lang, speechText)''',
-        "duration cache key uses sanitized text")
-    replace_in_method(
-        vot,
-        "private static long getSpeechDurationMs(",
-        "\n    /**\n     * Estimates natural speech duration",
-        '''(long) seg.text.length() * TtsEngine.ESTIMATED_MS_PER_CHAR''',
-        '''(long) speechText.length() * TtsEngine.ESTIMATED_MS_PER_CHAR''',
-        "duration estimate uses sanitized text")
-    replace_in_method(
-        vot,
-        "private static void speak(TranscriptSegment seg, int index)",
-        "\n    private static void triggerNextSegmentCheck()",
-        '''getSpeechDurationMs(seg, index, voice, lang)''',
-        '''getSpeechDurationMs(seg, index, voice, lang, speechText)''',
-        "call duration lookup with sanitized text")
+        '''        Logger.printDebug(() -> "Speak: " + seg);\n        final String speechText = DubTextSanitizer.cleanForSpeech(seg.text);\n        if (speechText == null || !speechText.equals(seg.text)) {\n            if (pendingSpeechIndex == index) pendingSpeechIndex = -1;\n            lastSpokenIndex = Math.max(lastSpokenIndex, index);\n            SpanishStudyController.onDubPlaybackSkipped(seg, index);\n            SpanishStudyDiagnostics.record("TTS-SANITIZE", speechText == null\n                    ? "blocked protocol-only text index=" + index\n                    : "blocked residual protocol metadata index=" + index);\n            triggerNextSegmentCheck();\n            return;\n        }\n        String lang = resolveTargetLang();''',
+        "fail closed if protocol metadata reaches TTS")
 
     # ---- Speaker behavior must match the real backend ----------------------------------------
     replace_in_method(
