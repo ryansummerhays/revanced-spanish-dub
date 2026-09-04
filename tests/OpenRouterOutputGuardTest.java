@@ -12,6 +12,22 @@ public final class OpenRouterOutputGuardTest {
                 "2: [slot=6.18s]: Las vibraciones están afectando la circuitería.", 3);
         check(p != null && p.index == 1, "numbered line should parse");
         check("Las vibraciones están afectando la circuitería.".equals(p.text), "slot marker should strip");
+
+        OpenRouterOutputGuard.ParsedLine duplicateProtocol = OpenRouterOutputGuard.parseNumberedLine(
+                "1: 1: [slot=1.34s] Agarras una baya.", 2);
+        check(duplicateProtocol != null && "Agarras una baya.".equals(duplicateProtocol.text),
+                "duplicate enumeration before slot metadata must strip");
+
+        check("Hola.".equals(OpenRouterOutputGuard.sanitizeTranslation("[1.8 seconds] Hola.")),
+                "bracketed seconds metadata must strip");
+        check("Hola.".equals(OpenRouterOutputGuard.sanitizeTranslation("[1.8 sec]: Hola.")),
+                "bracketed sec metadata must strip");
+        check("Hola.".equals(OpenRouterOutputGuard.sanitizeTranslation("(1.8s) Hola.")),
+                "parenthesized seconds metadata must strip");
+        check("1.8 segundos después nos fuimos.".equals(OpenRouterOutputGuard.sanitizeTranslation(
+                "1.8 segundos después nos fuimos.")),
+                "legitimate unbracketed duration speech must remain");
+
         check(OpenRouterOutputGuard.parseNumberedLine(
                 "1: [107200-109480] >> ¿Estás bromeando?", 2) == null,
                 "old raw-caption timestamp echo must be rejected");
