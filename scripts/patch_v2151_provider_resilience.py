@@ -475,13 +475,8 @@ def main() -> None:
         // True while the next dispatched batch is the first one after a start or seek.''',
         "track recoverable provider failures")
 
-    rep(translator,
-        '''                if (abortTranslation) break;
-
-                applyBatch(working, batch, offset, translated, targetLang);''',
-        '''                if (abortTranslation) break;
-
-                if (translated == null && ProviderResiliencePolicy.shouldRetryOpenRouter(
+    retry_anchor = '''                applyBatch(working, batch, offset, translated, targetLang);'''
+    retry_block = '''                if (translated == null && ProviderResiliencePolicy.shouldRetryOpenRouter(
                         service, externalAbortRequested, reprioritize)) {
                     consecutiveProviderFailures++;
                     final long retryDelay = ProviderResiliencePolicy.retryDelayMs(consecutiveProviderFailures);
@@ -496,7 +491,8 @@ def main() -> None:
                     continue;
                 }
                 consecutiveProviderFailures = 0;
-                applyBatch(working, batch, offset, translated, targetLang);''',
+''' + retry_anchor
+    rep(translator, retry_anchor, retry_block,
         "retry failed OpenRouter batch without killing background translation")
 
     rep(controller,
