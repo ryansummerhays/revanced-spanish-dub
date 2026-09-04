@@ -91,12 +91,18 @@ def main() -> None:
                 for (int i = 0; i < left.size() && i < leftSegments.size(); i++) merged.set(i, left.get(i));
                 for (int i = 0; i < right.size() && i < rightSegments.size(); i++) merged.set(split + i, right.get(i));
             }
-            // If either half returned a short prefix, keep only the contiguous translated prefix so
-            // the caller's existing retry-tail logic remains correct.
-            int contiguous = 0;
+
+            // translateBatchOpenRouterSingle returns exactly the contiguous numbered prefix that the
+            // provider actually supplied. Use those returned lengths as the completion signal rather
+            // than comparing translated text with English source text: proper nouns, acronyms and
+            // coined terms may legitimately remain byte-for-byte unchanged after translation.
+            final int leftReady = Math.min(left.size(), leftSegments.size());
+            final int rightReady = Math.min(right.size(), rightSegments.size());
+            final int contiguous = leftReady < leftSegments.size()
+                    ? leftReady
+                    : leftSegments.size() + rightReady;
             synchronized (merged) {
-                while (contiguous < size && !merged.get(contiguous).equals(segments.get(contiguous).text)) contiguous++;
-                if (contiguous == size) return new ArrayList<>(merged);
+                if (contiguous >= size) return new ArrayList<>(merged);
                 if (contiguous > 0) return new ArrayList<>(merged.subList(0, contiguous));
             }
             return new ArrayList<>();
@@ -226,7 +232,6 @@ def main() -> None:
                 + " elapsedMs=" + (System.currentTimeMillis() - start)
                 + " matched=" + matchedFirst + "/" + segmentSize);''',
         "log OpenRouter subrequest completion")
-
 
     print("v2.15c OpenRouter parallel/context telemetry integration complete")
 
