@@ -15,8 +15,9 @@ def rep(path: Path, old: str, new: str, label: str, count: int = 1) -> None:
 
 def method_section(path: Path, start_marker: str, end_marker: str):
     text = path.read_text(encoding="utf-8")
-    start = text.index(start_marker)
-    end = text.index(end_marker, start)
+    marker = text.index(start_marker)
+    start = text.rfind("\n", 0, marker) + 1
+    end = text.index(end_marker, marker)
     return text, start, end, text[start:end]
 
 
