@@ -11,9 +11,8 @@ public final class DubTextSanitizer {
     private DubTextSanitizer() {}
 
     private static final String UNIT = "(?:s|sec|secs|second|seconds)";
-    private static final Pattern REDUNDANT_ENUM_BEFORE_METADATA = Pattern.compile(
-            "^\\s*\\d{1,3}\\s*[:.)-]\\s*(?=[\\[(]\\s*(?:slot\\b|\\d+(?:\\.\\d+)?\\s*" + UNIT + "))",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEADING_BATCH_ENUM = Pattern.compile(
+            "^\\s*\\d{1,3}\\s*[:.)-]\\s+");
     private static final Pattern SLOT_PREFIX = Pattern.compile(
             "^\\s*[\\[(]\\s*slot\\s*(?:=|:)\\s*\\d+(?:\\.\\d+)?\\s*(?:" + UNIT + ")?\\s*[\\])]\\s*:?[ \\t]*",
             Pattern.CASE_INSENSITIVE);
@@ -30,6 +29,7 @@ public final class DubTextSanitizer {
 
     /**
      * Returns clean user-facing/spoken text, or null when the value is protocol garbage.
+     * The OpenRouter line numbers are transport IDs, never speaker labels or dialogue.
      * Legitimate unbracketed speech such as "1.8 segundos después" is preserved.
      */
     public static String cleanForSpeech(String text) {
@@ -37,11 +37,11 @@ public final class DubTextSanitizer {
         String value = normalizeWhitespace(text).trim();
         if (value.isEmpty()) return null;
 
-        // Strip only protocol-shaped prefixes. Loop handles double emission such as
-        // "1: [slot=1.8s] [1.8 seconds] Hola" without touching ordinary numbered speech.
-        for (int pass = 0; pass < 5; pass++) {
+        // Repeat because malformed model output can stack transport IDs and timing markers:
+        // "1: 1: [slot=1.8s] [1.8 seconds] Hola".
+        for (int pass = 0; pass < 6; pass++) {
             String before = value;
-            value = REDUNDANT_ENUM_BEFORE_METADATA.matcher(value).replaceFirst("").trim();
+            value = LEADING_BATCH_ENUM.matcher(value).replaceFirst("").trim();
             value = SLOT_PREFIX.matcher(value).replaceFirst("").trim();
             value = BRACKET_DURATION_PREFIX.matcher(value).replaceFirst("").trim();
             value = BARE_SLOT_PREFIX.matcher(value).replaceFirst("").trim();
