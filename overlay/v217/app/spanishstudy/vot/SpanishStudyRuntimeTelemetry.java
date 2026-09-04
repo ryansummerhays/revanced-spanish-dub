@@ -22,6 +22,10 @@ public final class SpanishStudyRuntimeTelemetry {
         return epoch.incrementAndGet();
     }
 
+    public static long bumpEpoch() {
+        return epoch.incrementAndGet();
+    }
+
     public static long currentEpoch() {
         return epoch.get();
     }
