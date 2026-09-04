@@ -26,6 +26,7 @@ def main() -> None:
     vot = (pkg / "VoiceOverTranslationPatch.java").read_text(encoding="utf-8")
     study = root / "extensions/youtube/src/main/java/app/spanishstudy/vot"
     controller = (study / "SpanishStudyController.java").read_text(encoding="utf-8")
+    runtime = (study / "SpanishStudyRuntimeTelemetry.java").read_text(encoding="utf-8")
     overlay = (study / "SpanishSubtitleOverlay.java").read_text(encoding="utf-8")
 
     # Native Morphe architecture remains authoritative.
@@ -44,8 +45,10 @@ def main() -> None:
     require(vot, "SpanishStudyController.allowTts", "pre-TTS language guard")
     require(vot, "SpanishStudyController.onTtsWindow", "Morphe timing bridge")
     require(vot, "ttsEndVideoTimeMs = speakFromMs", "native effective TTS end remains timing source")
-    require(controller, "translatedSnapshotsSuppressed", "snapshot dedupe diagnostics")
-    require(controller, "sessionEpoch", "session epoch diagnostics")
+    require(controller, "recordSnapshotSuppressed", "snapshot dedupe path")
+    require(controller, "SpanishStudyRuntimeTelemetry.diagnostics", "runtime telemetry in diagnostics")
+    require(runtime, "translatedSnapshotsSuppressed", "snapshot dedupe counter")
+    require(runtime, "sessionEpoch=", "session epoch diagnostic field")
     require(overlay, "findTranslatedIndex", "independent Spanish presentation timing")
     require(overlay, "setMaxLines(4)", "longer subtitle display capacity")
 
