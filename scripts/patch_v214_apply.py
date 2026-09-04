@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Apply v2.14 with compatibility for the post-runtime-diagnostics newVideoLoaded gate."""
+"""Apply v2.14 against the fully patched v2.13 generated-source shapes."""
 from pathlib import Path
 import importlib.util
-import sys
 
 HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
@@ -13,11 +12,18 @@ SPEC.loader.exec_module(MOD)
 ORIG_REP = MOD.rep
 
 
-def compat_rep(path: Path, old: str, new: str, label: str):
-    if label != "warm native TTS for persisted active sessions":
-        return ORIG_REP(path, old, new, label)
+def replace_exact(path: Path, old: str, new: str, label: str):
+    text = path.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected final generated-source anchor once, found {count} in {path}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("patched:", label)
 
-    actual_old = '''        if (!Settings.VOT_ENABLED.get() || !sessionEnabled) {
+
+def compat_rep(path: Path, old: str, new: str, label: str):
+    if label == "warm native TTS for persisted active sessions":
+        actual_old = '''        if (!Settings.VOT_ENABLED.get() || !sessionEnabled) {
             SpanishStudyDiagnostics.record("VIDEO", "load skipped: VoT/session disabled");
             return;
         }
@@ -28,7 +34,7 @@ def compat_rep(path: Path, old: str, new: str, label: str):
         TtsPrefetcher.updateVideo(videoId, segments);
         SpanishStudyDiagnostics.record("CAPTIONS", "requesting transcript at hint=" + videoPositionHint);
         loadTranscript(videoId);'''
-    actual_new = '''        if (!Settings.VOT_ENABLED.get() || !sessionEnabled) {
+        actual_new = '''        if (!Settings.VOT_ENABLED.get() || !sessionEnabled) {
             SpanishStudyDiagnostics.record("VIDEO", "load skipped: VoT/session disabled");
             return;
         }
@@ -40,12 +46,23 @@ def compat_rep(path: Path, old: str, new: str, label: str):
         TtsPrefetcher.updateVideo(videoId, segments);
         SpanishStudyDiagnostics.record("CAPTIONS", "requesting transcript at hint=" + videoPositionHint);
         loadTranscript(videoId);'''
-    text = path.read_text(encoding="utf-8")
-    count = text.count(actual_old)
-    if count != 1:
-        raise RuntimeError(f"{label}: expected final diagnostic gate once, found {count} in {path}")
-    path.write_text(text.replace(actual_old, actual_new, 1), encoding="utf-8")
-    print("patched:", label)
+        return replace_exact(path, actual_old, actual_new, label)
+
+    if label == "clear failure counters on explicit reset":
+        actual_old = '''            currentVideoId = "";
+            currentSegments = Collections.emptyList();
+            failedUntilByIndex.clear();
+            currentVideoTimeMs = 0;
+            lock.notifyAll();'''
+        actual_new = '''            currentVideoId = "";
+            currentSegments = Collections.emptyList();
+            failedUntilByIndex.clear();
+            failedAttemptsByIndex.clear();
+            currentVideoTimeMs = 0;
+            lock.notifyAll();'''
+        return replace_exact(path, actual_old, actual_new, label)
+
+    return ORIG_REP(path, old, new, label)
 
 
 MOD.rep = compat_rep
