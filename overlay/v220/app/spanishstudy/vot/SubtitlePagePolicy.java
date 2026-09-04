@@ -10,6 +10,7 @@ public final class SubtitlePagePolicy {
     public static final int TARGET_WORDS = 10;
     public static final int TARGET_CHARS = 68;
     public static final int MIN_BREAK_WORDS = 5;
+    public static final int MIN_SENTENCE_WORDS = 3;
 
     public static final class Page {
         public final String text;
@@ -33,14 +34,10 @@ public final class SubtitlePagePolicy {
                 .replaceAll("\\s+", " ")
                 .trim();
 
-        // No space before ordinary punctuation.
         text = text.replaceAll("\\s+([,.;:!?%])", "$1");
-        // No space just inside brackets/Spanish opening punctuation.
         text = text.replaceAll("([\\(\\[\\{¿¡])\\s+", "$1");
         text = text.replaceAll("\\s+([\\)\\]\\}])", "$1");
-        // Repair captions such as don ' t / I ’ m without changing quotation marks elsewhere.
         text = text.replaceAll("(?<=\\p{L})\\s*['’]\\s*(?=\\p{L})", "'");
-        // Joiners sometimes remove a space after punctuation between words/sentences.
         text = text.replaceAll("([,;:!?])(?=[\\p{L}\\p{N}¿¡])", "$1 ");
         text = text.replaceAll("([.!?])(?=[A-ZÁÉÍÓÚÜÑ¿¡])", "$1 ");
         return text.replaceAll("\\s+", " ").trim();
@@ -54,11 +51,11 @@ public final class SubtitlePagePolicy {
         StringBuilder current = new StringBuilder();
         int words = 0;
 
-        for (int i = 0; i < tokens.length; i++) {
-            String token = tokens[i];
+        for (String token : tokens) {
             if (token.isBlank()) continue;
             int prospectiveChars = current.length() + (current.length() == 0 ? 0 : 1) + token.length();
-            boolean hardLimit = words >= TARGET_WORDS || (prospectiveChars > TARGET_CHARS && words >= MIN_BREAK_WORDS);
+            boolean hardLimit = words >= TARGET_WORDS
+                    || (prospectiveChars > TARGET_CHARS && words >= MIN_BREAK_WORDS);
             if (hardLimit && current.length() > 0) {
                 addPage(pages, current.toString());
                 current.setLength(0);
@@ -71,9 +68,10 @@ public final class SubtitlePagePolicy {
 
             boolean sentenceEnd = endsSentence(token);
             boolean clauseEnd = endsClause(token);
-            boolean enoughForNaturalBreak = words >= MIN_BREAK_WORDS;
-            boolean nearTarget = words >= TARGET_WORDS - 2 || current.length() >= TARGET_CHARS - 12;
-            if (enoughForNaturalBreak && (sentenceEnd || (clauseEnd && nearTarget))) {
+            boolean sentenceBreak = sentenceEnd && words >= MIN_SENTENCE_WORDS;
+            boolean clauseBreak = clauseEnd && words >= MIN_BREAK_WORDS
+                    && (words >= TARGET_WORDS - 2 || current.length() >= TARGET_CHARS - 12);
+            if (sentenceBreak || clauseBreak) {
                 addPage(pages, current.toString());
                 current.setLength(0);
                 words = 0;
