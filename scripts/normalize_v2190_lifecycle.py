@@ -9,9 +9,13 @@ def main():
     path = Path(sys.argv[1])
     text = path.read_text(encoding="utf-8")
 
+    old_clean = "        return value.replace('\\n', ' ').replace('\\r', ' ');"
+    if old_clean not in text:
+        raise RuntimeError("v2.19 clean helper escape anchor not found in patch script")
     text = text.replace(
-        "        return value.replace('\\\\n', ' ').replace('\\\\r', ' ');",
-        "        return value.replace((char)10, ' ').replace((char)13, ' ');")
+        old_clean,
+        "        return value.replace((char)10, ' ').replace((char)13, ' ');",
+        1)
 
     old_import = '''    rep(vot,\n        \'\'\'import app.spanishstudy.vot.SpanishStudyRuntimeTelemetry;\'\'\',\n        \'\'\'import app.spanishstudy.vot.SpanishStudyRuntimeTelemetry;\nimport app.spanishstudy.vot.WorkerLifecyclePolicy;\'\'\',\n        "import worker lifecycle policy")'''
     new_import = '''    rep(vot,\n        \'\'\'import app.spanishstudy.vot.SpanishStudyDiagnostics;\'\'\',\n        \'\'\'import app.spanishstudy.vot.SpanishStudyDiagnostics;\nimport app.spanishstudy.vot.SpanishStudyRuntimeTelemetry;\nimport app.spanishstudy.vot.WorkerLifecyclePolicy;\'\'\',\n        "import worker lifecycle policy")'''
