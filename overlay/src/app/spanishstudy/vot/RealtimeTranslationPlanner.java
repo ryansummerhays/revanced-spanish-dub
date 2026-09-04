@@ -27,4 +27,17 @@ public final class RealtimeTranslationPlanner {
         }
         return Math.max(1, count);
     }
+
+    /**
+     * Output cap for one OpenRouter subrequest. v2.15 used only 30 tokens/segment, which
+     * repeatedly ended with finish_reason=length and created artificial missing translations.
+     * This cap is intentionally generous: providers charge actual generated tokens, not the cap.
+     */
+    public static int openRouterMaxOutputTokens(int promptCaptionChars, int segmentCount) {
+        int chars = Math.max(0, promptCaptionChars);
+        int segments = Math.max(1, segmentCount);
+        int byText = chars / 2 + 96;
+        int bySegments = segments * 72;
+        return Math.max(192, Math.min(640, Math.max(byText, bySegments)));
+    }
 }
