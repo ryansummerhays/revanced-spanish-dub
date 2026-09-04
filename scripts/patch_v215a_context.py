@@ -43,8 +43,8 @@ def main() -> None:
     rep(fetcher,
         "    private static List<TranscriptSegment> fetchEnglishSegments(String videoId) {\n",
         "    private static List<TranscriptSegment> fetchEnglishSegments(String videoId) {\n"
-        "        VideoTranslationContext.beginVideo(videoId);\n",
-        "reset video translation context before caption fetch")
+        "        VideoTranslationContext.beginCaptionLoad(videoId);\n",
+        "reset raw-caption translation context before every caption load")
 
     metadata_anchor = '''                GeminiTranslator.prepareVideoMetadata(
                         videoId,
