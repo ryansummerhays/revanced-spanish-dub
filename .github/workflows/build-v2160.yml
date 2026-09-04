@@ -1,0 +1,89 @@
+name: Build Spanish Dub Study v2.16.0 Morphe core reconciliation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.16.0-morphe-core-reconciliation
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test v2.16 pure helpers
+        run: |
+          mkdir -p /tmp/spanish-study-test
+          javac -d /tmp/spanish-study-test \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterTelemetry.java \
+            tests/DubTextSanitizerTest.java \
+            tests/OpenRouterOutputGuardTest.java \
+            tests/OpenRouterBudgetV216Test.java \
+            tests/OpenRouterTelemetryV216Test.java
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterTelemetryV216Test
+
+      - name: Apply one Morphe-core integration layer
+        run: |
+          python3 scripts/normalize_v2160_integration.py scripts/patch_v2160_morphe_core.py
+          python3 scripts/patch_v2160_morphe_core.py upstream overlay/src overlay/v216
+          python3 scripts/audit_v2160_morphe_core.py upstream
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Package v2.16.0
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.16.0.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.16.0\nDescription: Morphe-core reconciliation release. Keeps Morphe v1.41.0 native caption segmentation, 1500-character OpenRouter batching with 350-character startup batch, playhead/seek prioritization, single streaming request path, persistent Edge TTS socket, distance-aware TTS prefetch, bounded TTS cache, playback-window adjustment and normal VOT UI. Adds bilingual Spanish/English subtitles, subtitle sizing/position controls, diagnostics, strict VOT-off provider cancellation, OpenRouter protocol sanitization, unique-slot alignment safety, a larger bounded output-token allowance and actual OpenRouter token/cost telemetry. No Gemini sidecar, speaker diarization, OpenRouter parallel splitter, custom speech-unit segmenter, or automatic Edge-to-system fallback is active.\nVersion: 2.16.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload v2.16.0 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.16.0-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
