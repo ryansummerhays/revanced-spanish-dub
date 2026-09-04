@@ -110,13 +110,13 @@ def main() -> None:
                 .append("This is diarization, not identity recognition: use anonymous labels A-H only. ")
                 .append("The same person must keep the same label across the video. Do not create a new person because someone yells, whispers, laughs, changes emotion/accent/prosody, or has a temporary microphone/voice-chat effect. ")
                 .append("If uncertain, prefer an established prior profile instead of inventing a switch. ")
-                .append("Return exactly one item per caption event below. confidence is 0..1 and reflects acoustic speaker-identity confidence, not transcript confidence.\\n")
-                .append(SpeakerAssignmentStore.rosterPrompt()).append("\\n\\nEVENTS IN CURRENT WINDOW:\\n");
+                .append("Return exactly one item per caption event below. confidence is 0..1 and reflects acoustic speaker-identity confidence, not transcript confidence.\n")
+                .append(SpeakerAssignmentStore.rosterPrompt()).append("\n\nEVENTS IN CURRENT WINDOW:\n");
         for (int i = 0; i < segments.size(); i++) {
             TranscriptSegment s = segments.get(i);
             prompt.append(i).append(" | ").append(formatTime(s.startMs)).append('-')
                     .append(formatTime(s.endMs)).append(" | ")
-                    .append(s.text == null ? "" : s.text.replace('\\n', ' ')).append('\\n');
+                    .append(s.text == null ? "" : s.text.replace('\n', ' ')).append('\n');
         }
         input.put(new JSONObject().put("type", "text").put("text", prompt.toString()));
 
