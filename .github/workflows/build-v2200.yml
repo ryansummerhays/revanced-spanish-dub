@@ -1,0 +1,114 @@
+name: Build Spanish Dub Study v2.20.0 subtitle pagination
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.20.0-subtitle-pagination
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test pure integrity through v2.20
+        run: |
+          rm -rf /tmp/spanish-study-test
+          mkdir -p /tmp/spanish-study-test
+          javac -d /tmp/spanish-study-test \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v217/app/spanishstudy/vot/DubLanguageGuard.java \
+            overlay/v217/app/spanishstudy/vot/OpenRouterTelemetry.java \
+            overlay/v217/app/spanishstudy/vot/SpanishStudyRuntimeTelemetry.java \
+            overlay/v219/app/spanishstudy/vot/WorkerLifecyclePolicy.java \
+            overlay/v219/app/spanishstudy/vot/TtsStartPolicy.java \
+            overlay/v220/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            tests/DubTextSanitizerTest.java \
+            tests/OpenRouterOutputGuardTest.java \
+            tests/OpenRouterBudgetV216Test.java \
+            tests/DubLanguageGuardV217Test.java \
+            tests/OpenRouterTelemetryV217Test.java \
+            tests/WorkerLifecyclePolicyV219Test.java \
+            tests/TtsStartPolicyV219Test.java \
+            tests/SubtitlePagePolicyV220Test.java
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubLanguageGuardV217Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterTelemetryV217Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.WorkerLifecyclePolicyV219Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TtsStartPolicyV219Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitlePagePolicyV220Test
+
+      - name: Apply audited integration through v2.20
+        run: |
+          python3 scripts/normalize_v2160_integration.py scripts/patch_v2160_morphe_core.py
+          python3 scripts/normalize_v2190_lifecycle.py scripts/patch_v2190_lifecycle.py
+          python3 scripts/patch_v2160_morphe_core.py upstream overlay/src overlay/v216
+          python3 scripts/patch_v2170_followup.py upstream overlay/v217
+          python3 scripts/patch_v2180_adaptive_recovery.py upstream
+          python3 scripts/patch_v2190_lifecycle.py upstream .
+          python3 scripts/patch_v2190_speaker.py upstream .
+          python3 scripts/patch_speaker_voices.py upstream
+          python3 scripts/patch_v2200_subtitles.py upstream .
+          python3 scripts/audit_v2160_morphe_core.py upstream
+          python3 scripts/audit_v2170_followup.py upstream
+          python3 scripts/audit_v2180_adaptive_recovery.py upstream
+          python3 scripts/audit_v2190_lifecycle_speaker.py upstream
+          python3 scripts/audit_v2200_subtitles.py upstream
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Package v2.20.0
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.20.0.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.20.0\nDescription: Morphe v1.41.0 core with v2.19 lifecycle, TTS, OpenRouter integrity, and isolated speaker recognition retained. Adds lossless display-only subtitle pagination targeting about 10 words / 68 characters per card with a 3-line safety valve, conservative English/Spanish spacing cleanup, progress-weighted page transitions synchronized to Morphe's effective TTS window, and partial-speech offset alignment for late/repeated TTS starts. Translation segmentation, translation text used by TTS, synthesis, cache, and playback remain unchanged. Also replaces the v2.19 speaker sidecar's rejected public-YouTube static processing object with Gemini 3.7 Flash agentic timestamp navigation.\nVersion: 2.20.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > spanish-dub-study-patches-v2.20.0-SHA256SUMS.txt
+          cat spanish-dub-study-patches-v2.20.0-SHA256SUMS.txt
+
+      - name: Upload v2.20.0 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.20.0-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
