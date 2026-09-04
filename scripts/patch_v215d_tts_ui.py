@@ -59,8 +59,6 @@ def main() -> None:
     }''',
         "diagnose TTS completion")
 
-    # Earlier release layers add other per-video cleanup calls between these stores, so anchor only
-    # to the correction-store reset and add provenance cleanup immediately beside it.
     insert_after(controller,
         '''        TranscriptCorrectionStore.clear();
 ''',
@@ -135,11 +133,13 @@ def main() -> None:
 ''',
         "expose normal Morphe provider in study UI")
 
+    # The Java source contains the two-character escape sequence backslash+n. Keep it escaped in
+    # this Python patch string rather than accidentally embedding a literal newline inside a char.
     rep(controller,
-        '''        report.append("loading=").append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\n');''',
-        '''        report.append("startupReady=").append(!latest.isEmpty()).append('\n');
+        '''        report.append("loading=").append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\\n');''',
+        '''        report.append("startupReady=").append(!latest.isEmpty()).append('\\n');
         report.append("backgroundTranslationActive=")
-                .append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\n');''',
+                .append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\\n');''',
         "separate startup readiness from background translation")
 
     text = controller.read_text(encoding="utf-8")
@@ -152,22 +152,25 @@ def main() -> None:
                 .append(RealtimeTranslationPlanner.MAX_BATCH_SEGMENTS).append(" segments/")
                 .append(RealtimeTranslationPlanner.MAX_BATCH_CHARS).append(" chars\\n");
         report.append("openRouterParallelism=")
-                .append(RealtimeTranslationPlanner.OPENROUTER_PARALLEL_REQUESTS).append('\n');
+                .append(RealtimeTranslationPlanner.OPENROUTER_PARALLEL_REQUESTS).append('\\n');
         report.append("translationContext=video-metadata+whole-video-terms+nearby-raw-cues\\n");
-        report.append("rawCaptionCues=").append(VideoTranslationContext.rawCueCount()).append('\n');
+        report.append("rawCaptionCues=").append(VideoTranslationContext.rawCueCount()).append('\\n');
         report.append("sourceRepair=local-boundary-repair+implicit-ai-asr-repair\\n");
-        report.append("translationProvenanceEntries=").append(TranslationProvenanceLog.size()).append('\n');
+        report.append("translationProvenanceEntries=").append(TranslationProvenanceLog.size()).append('\\n');
 '''
     text = text.replace(old_batch_diag, new_batch_diag, 1)
     controller.write_text(text, encoding="utf-8")
     print("patched: v2.15 diagnostic header/context/realtime policy")
 
+    # v2.10 relabeled the old Gemini credential row to "Advanced analysis (future)" and disabled
+    # its click action. Replace that final post-chain shape with the provider that actually controls
+    # translation now.
     rep(sheet,
-        '''        LinearLayout geminiRow=valueRow(activity,fg,"Gemini settings",
+        '''        LinearLayout geminiRow=valueRow(activity,fg,"Advanced analysis (future)",
                 SpanishStudyPrefs.geminiApiKey(activity).trim().isEmpty()
                         ? "Not configured"
                         : SpanishStudyPrefs.geminiModel(activity));
-        geminiRow.setOnClickListener(v->SpanishStudyController.configureGemini(activity));
+        geminiRow.setOnClickListener(v->Toast.makeText(activity,"Cloud analysis is disabled in this stable build",Toast.LENGTH_SHORT).show());
         content.addView(geminiRow);''',
         '''        LinearLayout providerRow=valueRow(activity,fg,"Translation provider",
                 SpanishStudyController.translationProviderStatus());
