@@ -50,6 +50,7 @@ jobs:
             overlay/src/app/spanishstudy/vot/TranslationProviderPolicy.java \
             overlay/src/app/spanishstudy/vot/OpenRouterRecoveryPolicy.java \
             overlay/src/app/spanishstudy/vot/TranslationQualityLog.java \
+            overlay/src/app/spanishstudy/vot/SessionTogglePolicy.java \
             overlay/src/app/spanishstudy/vot/TranslationAlignmentGuard.java \
             overlay/src/app/spanishstudy/vot/TranscriptCorrectionStore.java \
             overlay/src/app/spanishstudy/vot/SourceExpressionMath.java \
@@ -60,7 +61,7 @@ jobs:
             tests/SourceCaptionTimingStoreTest.java tests/SpeechUnitPlannerTest.java \
             tests/StartupSpeechPolicyTest.java tests/StartupTranslationPlannerTest.java \
             tests/TranslationProviderPolicyTest.java tests/OpenRouterRecoveryPolicyTest.java \
-            tests/TranslationQualityLogTest.java \
+            tests/TranslationQualityLogTest.java tests/SessionTogglePolicyTest.java \
             tests/TranslationAlignmentGuardTest.java tests/TranscriptCorrectionStoreTest.java \
             tests/SourceExpressionMathTest.java tests/NaturalProsodyFormatterTest.java \
             tests/WholeTranscriptDesignTest.java
@@ -77,6 +78,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationProviderPolicyTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterRecoveryPolicyTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationQualityLogTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SessionTogglePolicyTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranscriptCorrectionStoreTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
@@ -139,6 +141,7 @@ jobs:
           python3 scripts/patch_v214_openrouter_final.py upstream
           python3 scripts/audit_v214_openrouter_final.py upstream
           python3 scripts/patch_v2141_openrouter_runtime.py upstream
+          python3 scripts/patch_v2141_user_toggle.py upstream
           python3 scripts/audit_v2141_openrouter_runtime.py upstream
 
       - name: Build Morphe patch bundle
@@ -157,7 +160,7 @@ jobs:
           srcs=glob.glob('upstream/patches/build/libs/*.mpp')
           if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
           src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.14.1.mpp'
-          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.1\nDescription: OpenRouter runtime recovery and model-evaluation hotfix. Preserves v2.14 provider toggling, audible startup, offline TTS fallback, English-first captions, pause-aware speech units and conservative speaker evidence. Adds authoritative provider request/result/error telemetry, key-configured/model diagnostics without exposing secrets, Google fail-forward when OpenRouter silently returns no usable result, explicit-abort-safe recovery, and a separate bounded 120-pair source-English versus translated-Spanish quality trace with provider/model/timing metadata for model comparison. Based on Morphe 1.41.0\nVersion: 2.14.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.1\nDescription: OpenRouter runtime recovery and model-evaluation hotfix. Preserves v2.14 provider toggling, audible startup, offline TTS fallback, English-first captions, pause-aware speech units and conservative speaker evidence. Adds authoritative provider request/result/error telemetry, key-configured/model diagnostics without exposing secrets, Google fail-forward when OpenRouter silently returns no usable result, explicit-abort-safe recovery, a separate bounded 120-pair source-English versus translated-Spanish quality trace with provider/model/timing metadata, and restores explicit user VOT OFF/ON toggling even while a transcript is loading. Based on Morphe 1.41.0\nVersion: 2.14.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
               for info in zin.infolist():
                   zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
