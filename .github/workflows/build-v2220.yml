@@ -95,6 +95,8 @@ jobs:
           python3 scripts/audit_v2210_source_subtitle_sync.py upstream
           python3 scripts/patch_v2220_audio_locked_subtitles.py upstream .
           python3 scripts/audit_v2220_audio_locked_subtitles.py upstream
+          python3 scripts/patch_v2221_speaker_oneshot.py upstream
+          python3 scripts/audit_v2221_speaker_oneshot.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -112,7 +114,7 @@ jobs:
           srcs=glob.glob('upstream/patches/build/libs/*.mpp')
           if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
           src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.22.0.mpp'
-          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.22.0\nDescription: Morphe v1.41.0 core with v2.21 English-first caption-source restoration retained. Keeps lossless short subtitle pagination but replaces scheduled/source-fallback dub timing with an actual Edge MediaPlayer-start callback: bilingual pages stay on page one while translated audio is still synthesizing/preparing, then advance from the real audible TTS start and slot-fit rate. Source-only captions still use source timing. Adds a separate pill-style A/B/C speaker badge, inspectable anonymous speaker profile details, Gemini Interactions token/cost telemetry, lower speaker-analysis cadence, and a ten-minute quota/rate-limit backoff for HTTP 429. Translation batching, translated speech text, Edge synthesis, cache/prefetch, and Morphe playback scheduling remain otherwise unchanged.\nVersion: 2.22.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.22.0\nDescription: Morphe v1.41.0 core with v2.21 English-first caption-source restoration retained. Keeps lossless short subtitle pagination but replaces scheduled/source-fallback dub timing with an actual Edge MediaPlayer-start callback: bilingual pages stay on page one while translated audio is synthesizing/preparing, then advance from the real audible TTS start and slot-fit rate. Adds a separate pill-style A/B/C speaker badge, inspectable anonymous speaker profile details, Gemini Interactions token/cost telemetry, and ten-minute HTTP-429 quota backoff. Speaker diarization is changed from repeated rolling full-YouTube-URL requests to one background whole-video caption map per video, reducing YouTube ingestion quota use and improving cross-video-timeline speaker consistency. Translation batching, translated speech text, Edge synthesis, cache/prefetch, and Morphe speech playback scheduling remain otherwise unchanged.\nVersion: 2.22.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
               for info in zin.infolist():
                   zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
