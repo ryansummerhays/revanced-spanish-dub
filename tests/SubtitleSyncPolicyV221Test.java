@@ -10,7 +10,6 @@ public final class SubtitleSyncPolicyV221Test {
     }
 
     private static void normalPlaybackNeverRewindsPageProgress() {
-        near(0.60, SubtitleSyncPolicy.monotonicProgress(0.60, 0.75, false));
         near(0.75, SubtitleSyncPolicy.monotonicProgress(0.60, 0.75, false));
     }
 
