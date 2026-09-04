@@ -1,0 +1,162 @@
+name: Build Spanish Dub Study v2.14.0 audible-startup bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.14.0-audible-startup
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout custom overlay
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test study helpers
+        run: |
+          mkdir -p /tmp/spanish-study-test
+          javac -d /tmp/spanish-study-test \
+            overlay/src/app/spanishstudy/vot/VocabularyEntry.java \
+            overlay/src/app/spanishstudy/vot/VocabularyAnalyzer.java \
+            overlay/src/app/spanishstudy/vot/CaptionTrackPreference.java \
+            overlay/src/app/spanishstudy/vot/CaptionNamedSpeakerStore.java \
+            overlay/src/app/spanishstudy/vot/CaptionSpeakerTurnStore.java \
+            overlay/src/app/spanishstudy/vot/EdgeFallbackPolicy.java \
+            overlay/src/app/spanishstudy/vot/SemanticClauseSplitter.java \
+            overlay/src/app/spanishstudy/vot/SourceCaptionTimingStore.java \
+            overlay/src/app/spanishstudy/vot/SpeechUnitPlanner.java \
+            overlay/src/app/spanishstudy/vot/StartupSpeechPolicy.java \
+            overlay/src/app/spanishstudy/vot/StartupTranslationPlanner.java \
+            overlay/src/app/spanishstudy/vot/TranslationAlignmentGuard.java \
+            overlay/src/app/spanishstudy/vot/TranscriptCorrectionStore.java \
+            overlay/src/app/spanishstudy/vot/SourceExpressionMath.java \
+            overlay/src/app/spanishstudy/vot/NaturalProsodyFormatter.java \
+            tests/VocabularyAnalyzerTest.java tests/CaptionTrackPreferenceTest.java \
+            tests/CaptionNamedSpeakerStoreTest.java tests/CaptionSpeakerTurnStoreTest.java \
+            tests/EdgeFallbackPolicyTest.java tests/SemanticClauseSplitterTest.java \
+            tests/SourceCaptionTimingStoreTest.java tests/SpeechUnitPlannerTest.java \
+            tests/StartupSpeechPolicyTest.java tests/StartupTranslationPlannerTest.java \
+            tests/TranslationAlignmentGuardTest.java tests/TranscriptCorrectionStoreTest.java \
+            tests/SourceExpressionMathTest.java tests/NaturalProsodyFormatterTest.java \
+            tests/WholeTranscriptDesignTest.java
+          java -cp /tmp/spanish-study-test VocabularyAnalyzerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.CaptionTrackPreferenceTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.CaptionNamedSpeakerStoreTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.CaptionSpeakerTurnStoreTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.EdgeFallbackPolicyTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SemanticClauseSplitterTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceCaptionTimingStoreTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SpeechUnitPlannerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.StartupSpeechPolicyTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.StartupTranslationPlannerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranscriptCorrectionStoreTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.NaturalProsodyFormatterTest
+          java -cp /tmp/spanish-study-test WholeTranscriptDesignTest
+
+      - name: Apply full v2.14 patch chain and audits
+        run: |
+          python3 scripts/apply_overlay.py upstream overlay/src
+          python3 scripts/patch_provider_picker.py upstream
+          python3 scripts/patch_video_context.py upstream
+          python3 scripts/patch_gemini_correction_commit.py upstream
+          python3 scripts/patch_natural_speech_boundaries.py upstream
+          python3 scripts/patch_bilingual_subtitles.py upstream
+          python3 scripts/patch_autodub_timeline.py upstream
+          python3 scripts/patch_quickstart_gemini.py upstream
+          python3 scripts/patch_long_video_startup.py upstream
+          python3 scripts/patch_video_grounding_delegate.py upstream
+          python3 scripts/patch_gemini_model_compat.py upstream
+          python3 scripts/patch_speaker_reference_clips.py upstream
+          python3 scripts/patch_playhead_priority.py upstream
+          python3 scripts/patch_gemini_json_recovery.py upstream
+          python3 scripts/patch_autostart_session.py upstream
+          python3 scripts/patch_live_speech_rate.py upstream
+          python3 scripts/patch_translation_language_guard.py upstream
+          python3 scripts/patch_atomic_dub_events.py upstream
+          python3 scripts/patch_progressive_prefetch.py upstream
+          python3 scripts/patch_transport_sync.py upstream
+          python3 scripts/patch_phrase_start_sync.py upstream
+          python3 scripts/patch_natural_prosody.py upstream
+          python3 scripts/patch_study_transport_tools.py upstream
+          python3 scripts/patch_bounded_prefetch_window.py upstream
+          python3 scripts/patch_subtitle_study_gestures.py upstream
+          python3 scripts/patch_speaker_ui.py upstream
+          python3 scripts/patch_speaker_voices.py upstream
+          python3 scripts/patch_runtime_diagnostics.py upstream
+          python3 scripts/patch_diagnostics_version.py upstream
+          python3 scripts/patch_v270_speaker_pacing.py upstream
+          python3 scripts/patch_safe_gemini_settings.py upstream
+          python3 scripts/patch_v280_hybrid_resilience.py upstream
+          python3 scripts/patch_v281_monotonic_tts.py upstream
+          python3 scripts/patch_v290_full_pipeline_audit.py upstream
+          python3 scripts/audit_v290_pipeline.py upstream
+          python3 scripts/patch_v291_caption_recovery.py upstream
+          python3 scripts/patch_v291_compile_escape_fix.py upstream
+          python3 scripts/audit_v291_caption_recovery.py upstream
+          python3 scripts/patch_v210_grounding_gate_compat.py upstream
+          python3 scripts/patch_v210_google_local_stability_final.py upstream
+          python3 scripts/audit_v210_google_local_stability_final.py upstream
+          python3 scripts/patch_v211_natural_phrases.py upstream
+          python3 scripts/audit_v211_natural_phrases.py upstream
+          python3 scripts/patch_v212_speech_units.py upstream
+          python3 scripts/audit_v212_speech_units.py upstream
+          python3 scripts/patch_v213_source_speaker_safety.py upstream
+          python3 scripts/audit_v213_source_speaker_safety.py upstream
+          python3 scripts/patch_v214_audible_startup.py upstream
+          python3 scripts/patch_v214_visibility_fix.py upstream
+          python3 scripts/audit_v214_audible_startup.py upstream
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Package v2.14.0
+        run: |
+          mkdir -p dist
+          python3 - <<'PY'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.14.0.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.0\nDescription: Local-first audible-startup reliability release. Keeps v2.13 English-first captions, pause-aware 2.4s speech units, and provisional speaker boundaries. Adds small first Google translation batches, speech-backend warmup when enabling late, stale-video TTS generation guards, a temporary genuinely-offline Android Spanish TTS fallback after repeated Edge failures, and explicit caption-named speaker identity without guessing bare marker identity. Based on Morphe 1.41.0\nVersion: 2.14.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY
+          cd dist
+          sha256sum *.mpp > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload v2.14.0 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.14.0
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
