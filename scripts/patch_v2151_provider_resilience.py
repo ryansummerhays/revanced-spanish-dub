@@ -64,6 +64,18 @@ def main() -> None:
                 .put("max_tokens", segments.size() * 30)''',
         "request exact OpenRouter usage accounting")
 
+    rep(translator,
+        '''        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        conn.setRequestProperty("Accept-Encoding", "identity");
+        conn.setDoOutput(true);''',
+        '''        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        conn.setRequestProperty("Accept-Encoding", "identity");
+        conn.setRequestProperty("X-OpenRouter-Metadata", "enabled");
+        conn.setDoOutput(true);''',
+        "enable OpenRouter router metadata")
+
     old_parse = '''    private static boolean parseLine(String line, List<String> result, int segmentCount) {
         int i = 0;
         while (i < line.length() && Character.isDigit(line.charAt(i))) i++;
@@ -145,6 +157,14 @@ def main() -> None:
     rep(translator, old_positional, new_positional, "guard positional OpenRouter recovery")
 
     rep(translator,
+        '''                for (int i = 0; i < segmentSize; i++) result.set(i, positional.get(i));
+                matched[0] = segmentSize;''',
+        '''                for (int i = 0; i < segmentSize; i++) result.set(i, positional.get(i));
+                Arrays.fill(matchedSlots, true);
+                matched[0] = segmentSize;''',
+        "mark positional OpenRouter recovery fully aligned")
+
+    rep(translator,
         '''        SpanishStudyDiagnostics.record("OPENROUTER-REQ", "start id=" + requestId
                 + " events=" + segments.size() + " contextChars=" + videoContext.length()
                 + " model=" + model);''',
@@ -172,7 +192,11 @@ def main() -> None:
         activeConnections.add(conn);
         try {
             responseStatus = conn.getResponseCode();
-            final int code = responseStatus;''',
+            final int code = responseStatus;
+            String headerGeneration = conn.getHeaderField("X-Generation-Id");
+            if (headerGeneration != null && !headerGeneration.trim().isEmpty()) {
+                generationId = headerGeneration.trim();
+            }''',
         "prepare OpenRouter response telemetry")
 
     chunk_anchor = '''                    JSONArray choices = chunk.optJSONArray("choices");
@@ -203,6 +227,42 @@ def main() -> None:
                                     completionDetails.optLong("reasoningTokens", -1L));
                         }
                     }
+                    JSONObject routeMetadata = chunk.optJSONObject("openrouter_metadata");
+                    if (routeMetadata != null) {
+                        String selectedRouteProvider = "";
+                        JSONObject endpoints = routeMetadata.optJSONObject("endpoints");
+                        if (endpoints != null) {
+                            JSONArray available = endpoints.optJSONArray("available");
+                            if (available != null) {
+                                for (int ri = 0; ri < available.length(); ri++) {
+                                    JSONObject endpoint = available.optJSONObject(ri);
+                                    if (endpoint != null && endpoint.optBoolean("selected", false)) {
+                                        selectedRouteProvider = endpoint.optString("provider", "");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        StringBuilder attemptSummary = new StringBuilder();
+                        JSONArray attempts = routeMetadata.optJSONArray("attempts");
+                        if (attempts != null) {
+                            for (int ai = 0; ai < attempts.length(); ai++) {
+                                JSONObject attempt = attempts.optJSONObject(ai);
+                                if (attempt == null) continue;
+                                if (attemptSummary.length() > 0) attemptSummary.append(',');
+                                attemptSummary.append(attempt.optString("provider", "?"))
+                                        .append(':').append(attempt.optInt("status", 0));
+                            }
+                        }
+                        if (!selectedRouteProvider.isEmpty()) routedProvider = selectedRouteProvider;
+                        OpenRouterTelemetry.recordRouterMetadata(
+                                routeMetadata.optString("strategy", ""),
+                                routeMetadata.optString("region", ""),
+                                routeMetadata.optInt("attempt", 0),
+                                routeMetadata.optString("summary", ""),
+                                selectedRouteProvider,
+                                attemptSummary.toString());
+                    }
 
                     JSONArray choices = chunk.optJSONArray("choices");
                     if (choices == null || choices.length() == 0) continue;
@@ -212,7 +272,7 @@ def main() -> None:
                     JSONObject delta = choice.optJSONObject("delta");
                     if (delta == null) continue;
 '''
-    rep(translator, chunk_anchor, chunk_new, "parse OpenRouter usage/provider/final reason")
+    rep(translator, chunk_anchor, chunk_new, "parse OpenRouter usage/router/final reason")
 
     rep(translator,
         '''        } finally {
@@ -239,13 +299,25 @@ def main() -> None:
                 + " elapsedMs=" + (System.currentTimeMillis() - start)
                 + " matched=" + matchedFirst + "/" + segmentSize);
 
-        if (matchedFirst != segmentSize) {'''
-    new_finish = '''        final int rawMatched = matched[0];
-        final int matchedFirst = Math.max(0, Math.min(rawMatched, segmentSize));
-        if (rawMatched != segmentSize) {
-            OpenRouterTelemetry.recordCardinalityMismatch(segmentSize, rawMatched);
-            SpanishStudyDiagnostics.record("OPENROUTER-PARSE", "cardinality id=" + requestId
-                    + " expected=" + segmentSize + " unique=" + rawMatched);
+        if (matchedFirst != segmentSize) {
+            Logger.printDebug(() -> "OpenRouter line mismatch - expected: " + segmentSize
+                    + ", got: " + matchedFirst + "; last: " + (segmentSize - matchedFirst)
+                    + " segment(s) queued for retry");
+            if (matchedFirst > 0) {
+                // Return only the translated portion; the caller re-queues the tail for retry.
+                return new ArrayList<>(result.subList(0, matchedFirst));
+            }
+        }
+        return result;'''
+    new_finish = '''        final int uniqueMatched = Math.max(0, Math.min(matched[0], segmentSize));
+        int contiguousCount = 0;
+        while (contiguousCount < segmentSize && matchedSlots[contiguousCount]) contiguousCount++;
+        final int matchedFirst = contiguousCount;
+        if (uniqueMatched != segmentSize || matchedFirst != segmentSize) {
+            OpenRouterTelemetry.recordCardinalityMismatch(segmentSize, uniqueMatched);
+            SpanishStudyDiagnostics.record("OPENROUTER-PARSE", "alignment id=" + requestId
+                    + " expected=" + segmentSize + " unique=" + uniqueMatched
+                    + " contiguous=" + matchedFirst);
         }
         OpenRouterTelemetry.recordSuccess(responseStatus, System.currentTimeMillis() - start,
                 routedProvider, generationId, finishReason,
@@ -256,10 +328,31 @@ def main() -> None:
         SpanishStudyDiagnostics.record("OPENROUTER-REQ", "done id=" + requestId
                 + " elapsedMs=" + (System.currentTimeMillis() - start)
                 + " matched=" + matchedFirst + "/" + segmentSize
-                + " provider=" + routedProvider + " cost=" + usageCostUsd);
+                + " unique=" + uniqueMatched + " provider=" + routedProvider
+                + " cost=" + usageCostUsd);
 
-        if (matchedFirst != segmentSize) {'''
-    rep(translator, old_finish, new_finish, "clamp cardinality and record exact OpenRouter accounting")
+        if (matchedFirst != segmentSize) {
+            Logger.printDebug(() -> "OpenRouter line mismatch - expected: " + segmentSize
+                    + ", unique: " + uniqueMatched + ", contiguous: " + matchedFirst
+                    + "; last: " + (segmentSize - matchedFirst) + " segment(s) queued for retry");
+            if (matchedFirst > 0) {
+                // Return only the safely aligned contiguous head; the caller re-queues the tail.
+                return new ArrayList<>(result.subList(0, matchedFirst));
+            }
+            throw new Exception("OpenRouter output alignment mismatch: expected " + segmentSize
+                    + " safely aligned lines, got 0 contiguous");
+        }
+        return result;'''
+    rep(translator, old_finish, new_finish, "use contiguous alignment and exact OpenRouter accounting")
+
+    rep(translator,
+        '''            return new ArrayList<>();
+        } finally {
+            pool.shutdownNow();''',
+        '''            throw new Exception("OpenRouter parallel output had no contiguous aligned prefix");
+        } finally {
+            pool.shutdownNow();''',
+        "fail malformed empty parallel result into provider fallback")
 
     old_inner_fallback = '''            final String selectedService = Settings.VOT_TRANSLATION_SERVICE.get();
             if (TranslationProviderPolicy.shouldFallbackToGoogle(
@@ -284,17 +377,21 @@ def main() -> None:
             String msg = ex.getMessage();'''
     rep(translator, old_inner_fallback, new_inner_fallback, "remove duplicate Google fail-forward")
 
-    rep(translator,
-        '''            if (ex instanceof FileNotFoundException
-                    || (msg != null && (msg.contains("402") || msg.contains("429") || msg.contains("401") || msg.contains("403")))) {
-                abortTranslation = true;
-            }''',
-        '''            if (!TRANSLATION_SERVICE_OPENROUTER.equals(selectedService)
-                    && (ex instanceof FileNotFoundException
-                        || (msg != null && (msg.contains("402") || msg.contains("429") || msg.contains("401") || msg.contains("403"))))) {
-                abortTranslation = true;
-            }''',
-        "keep OpenRouter provider errors recoverable")
+    # Prior versions changed this catch block several times. Scope the edit to the original safe
+    # wrapper and guard the one provider-fatal assignment rather than depending on its formatting.
+    text = translator.read_text(encoding="utf-8")
+    method_start = text.index("private static List<String> translateBatchSafeOriginal")
+    method_end = text.index("\n    private static int findBatchAtTime", method_start)
+    method = text[method_start:method_end]
+    fatal_anchor = "                abortTranslation = true;"
+    if method.count(fatal_anchor) != 1:
+        raise RuntimeError("expected one provider-fatal abort assignment in translateBatchSafeOriginal")
+    method = method.replace(fatal_anchor,
+        '''                if (!TRANSLATION_SERVICE_OPENROUTER.equals(selectedService)) {
+                    abortTranslation = true;
+                }''', 1)
+    translator.write_text(text[:method_start] + method + text[method_end:], encoding="utf-8")
+    print("patched: keep OpenRouter provider errors recoverable")
 
     old_outer_fallback = '''        if (OpenRouterRecoveryPolicy.shouldFallbackToGoogle(
                 selected, false, externalAbortRequested, reprioritize)) {
