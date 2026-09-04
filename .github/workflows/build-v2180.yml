@@ -1,0 +1,97 @@
+name: Build Spanish Dub Study v2.18.0 adaptive OpenRouter recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.18.0-adaptive-openrouter-recovery
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test existing pure helpers
+        run: |
+          mkdir -p /tmp/spanish-study-test
+          javac -d /tmp/spanish-study-test \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v217/app/spanishstudy/vot/DubLanguageGuard.java \
+            overlay/v217/app/spanishstudy/vot/OpenRouterTelemetry.java \
+            overlay/v217/app/spanishstudy/vot/SpanishStudyRuntimeTelemetry.java \
+            tests/DubTextSanitizerTest.java \
+            tests/OpenRouterOutputGuardTest.java \
+            tests/OpenRouterBudgetV216Test.java \
+            tests/DubLanguageGuardV217Test.java \
+            tests/OpenRouterTelemetryV217Test.java
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubLanguageGuardV217Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterTelemetryV217Test
+
+      - name: Apply audited Morphe-core integration through v2.18
+        run: |
+          python3 scripts/normalize_v2160_integration.py scripts/patch_v2160_morphe_core.py
+          python3 scripts/patch_v2160_morphe_core.py upstream overlay/src overlay/v216
+          python3 scripts/patch_v2170_followup.py upstream overlay/v217
+          python3 scripts/patch_v2180_adaptive_recovery.py upstream
+          python3 scripts/audit_v2160_morphe_core.py upstream
+          python3 scripts/audit_v2170_followup.py upstream
+          python3 scripts/audit_v2180_adaptive_recovery.py upstream
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Package v2.18.0
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.18.0.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.18.0\nDescription: Morphe v1.41.0 core plus bounded adaptive OpenRouter recovery. Keeps native caption segmentation, 1500-character OpenRouter batching with 350-character startup batch, playhead/seek prioritization, single streaming request path, Edge TTS cache/prefetch/window adjustment, v2.17 subtitle timing, session epochs, and English-leak guards. OpenRouter output-integrity failures no longer retry the same malformed batch indefinitely: multi-segment no-prefix failures isolate the first slot while preserving the contiguous tail, singleton integrity failures fall back to Google once, transient transport failures receive one bounded retry before Google fallback, and recovery actions are exposed in diagnostics.\nVersion: 2.18.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload v2.18.0 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.18.0-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
