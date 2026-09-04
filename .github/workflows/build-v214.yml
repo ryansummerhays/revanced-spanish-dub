@@ -1,4 +1,4 @@
-name: Build Spanish Dub Study v2.14.0 TTS fail-forward bundle
+name: Build Spanish Dub Study v2.14.0 OpenRouter fail-forward bundle
 
 on:
   workflow_dispatch:
@@ -41,6 +41,7 @@ jobs:
             overlay/src/app/spanishstudy/vot/CaptionTrackPreference.java \
             overlay/src/app/spanishstudy/vot/CaptionSpeakerTurnStore.java \
             overlay/src/app/spanishstudy/vot/EdgeReliabilityPolicy.java \
+            overlay/src/app/spanishstudy/vot/TranslationProviderPolicy.java \
             overlay/src/app/spanishstudy/vot/SemanticClauseSplitter.java \
             overlay/src/app/spanishstudy/vot/SourceCaptionTimingStore.java \
             overlay/src/app/spanishstudy/vot/SpeechUnitPlanner.java \
@@ -50,6 +51,7 @@ jobs:
             overlay/src/app/spanishstudy/vot/NaturalProsodyFormatter.java \
             tests/VocabularyAnalyzerTest.java tests/CaptionTrackPreferenceTest.java \
             tests/CaptionSpeakerTurnStoreTest.java tests/EdgeReliabilityPolicyTest.java \
+            tests/TranslationProviderPolicyTest.java \
             tests/SemanticClauseSplitterTest.java tests/SourceCaptionTimingStoreTest.java \
             tests/SpeechUnitPlannerTest.java tests/TranslationAlignmentGuardTest.java \
             tests/TranscriptCorrectionStoreTest.java tests/SourceExpressionMathTest.java \
@@ -58,6 +60,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.CaptionTrackPreferenceTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.CaptionSpeakerTurnStoreTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.EdgeReliabilityPolicyTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationProviderPolicyTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SemanticClauseSplitterTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceCaptionTimingStoreTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SpeechUnitPlannerTest
@@ -135,7 +138,7 @@ jobs:
           srcs=glob.glob('upstream/patches/build/libs/*.mpp')
           if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
           src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.14.0.mpp'
-          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.0\nDescription: Local-first TTS reliability release. Keeps Google-only translation and v2.13 English-source safety, makes prefetched Edge the quality path while a warmed offline Android Spanish voice fails active cache misses forward instead of silence, suppresses repeatedly poisoned Edge prefetch slots per video, uses a smaller first Google translation slice for faster startup, and treats bare caption >> markers as untrusted cue markers rather than speaker changes. Only explicit labelled caption speakers are hard boundaries until local acoustic clustering exists. Based on Morphe 1.41.0\nVersion: 2.14.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.0\nDescription: Native-provider reliability release. Restores Morphe's normal translation-provider setting as the single source of truth, supports Morphe's built-in streaming OpenRouter path as the recommended primary translator, and automatically fails an ordinary OpenRouter provider/network failure forward to Google for the rest of that translation session without changing the saved provider. Gemini runtime remains disabled. Keeps v2.13 English-source safety and conservative speaker boundaries, prefetched Edge as the quality TTS path, warmed offline Android Spanish TTS for active Edge misses/failures, and per-video suppression of repeatedly poisoned Edge prefetch slots. Based on Morphe 1.41.0\nVersion: 2.14.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
               for info in zin.infolist():
                   zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
