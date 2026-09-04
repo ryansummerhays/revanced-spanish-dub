@@ -6,10 +6,8 @@ import java.util.TreeSet;
 /**
  * Lightweight local speaker-turn side data derived from explicit caption markup such as ">>".
  *
- * This does NOT claim to identify a person. It only preserves a trustworthy statement already
- * present in the caption track: a new speaker turn begins here. Those boundaries are hard stops for
- * sentence merging and speech-unit coalescing so two voices are never deliberately fused merely to
- * satisfy TTS timing. Identity clustering can later sit on top of the same boundaries.
+ * A bare marker is only a boundary signal. When the caption explicitly names a speaker after the
+ * marker, {@link CaptionNamedSpeakerStore} may additionally provide a trustworthy local identity.
  */
 public final class CaptionSpeakerTurnStore {
     private static final NavigableSet<Long> TURN_STARTS_MS = new TreeSet<>();
@@ -19,12 +17,12 @@ public final class CaptionSpeakerTurnStore {
 
     public static synchronized void beginTranscript() {
         TURN_STARTS_MS.clear();
+        CaptionNamedSpeakerStore.beginTranscript();
     }
 
     /**
      * Records every explicit ">>" marker in one timed JSON3 inner chunk. If a marker occurs inside
-     * the chunk rather than at its start, its timestamp is approximated by character position. This
-     * is sufficient to select the adjacent lexical boundary without pretending to be acoustic VAD.
+     * the chunk rather than at its start, its timestamp is approximated by character position.
      */
     public static synchronized void markFromChunk(long startMs, long endMs, String rawText) {
         if (rawText == null || rawText.isEmpty()) return;
@@ -37,7 +35,9 @@ public final class CaptionSpeakerTurnStore {
             if (at < 0) break;
             double fraction = at / (double) Math.max(1, rawText.length());
             long time = safeStart + Math.round(span * fraction);
-            TURN_STARTS_MS.add(Math.max(safeStart, Math.min(safeEnd, time)));
+            time = Math.max(safeStart, Math.min(safeEnd, time));
+            TURN_STARTS_MS.add(time);
+            CaptionNamedSpeakerStore.markTurn(time, rawText.substring(Math.min(rawText.length(), at + 2)));
             from = at + 2;
         }
     }
