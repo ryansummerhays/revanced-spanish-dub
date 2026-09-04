@@ -62,6 +62,19 @@ def compat_rep(path: Path, old: str, new: str, label: str):
             lock.notifyAll();'''
         return replace_exact(path, actual_old, actual_new, label)
 
+    if label == "cap first Google batch near playhead":
+        actual_old = '''                if ((isOpenRouter || isGemini) && firstBatchAfterReposition) {
+                    capFirstBatch(batches, batchDone, index);
+                }
+                firstBatchAfterReposition = false;'''
+        actual_new = '''                // First audible slice is deliberately small for Google as well as OpenRouter.
+                if (firstBatchAfterReposition && !isMyMemory) {
+                    capFirstBatch(batches, batchDone, index,
+                            isOpenRouter ? OPENROUTER_FIRST_BATCH_CHARS : GOOGLE_FIRST_BATCH_CHARS);
+                }
+                firstBatchAfterReposition = false;'''
+        return replace_exact(path, actual_old, actual_new, label)
+
     return ORIG_REP(path, old, new, label)
 
 
