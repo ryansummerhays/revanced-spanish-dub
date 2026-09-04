@@ -60,16 +60,22 @@ def main() -> None:
         '''            String rawTranslatedText = translated.get(j);\n            String translatedText = DubTextSanitizer.cleanForSpeech(rawTranslatedText);\n            if (translatedText == null) {\n                SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "drop final slot=" + (offset + j));\n                continue;\n            }\n            if (rawTranslatedText == null || !translatedText.equals(rawTranslatedText)) {\n                SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "clean final slot=" + (offset + j));\n            }\n            if (lang != null''',
         "sanitize every final provider result before transcript publication")
 
-    # Streamed OpenRouter updates used to bypass applyBatch(). Clean both the provenance pass and
-    # the actual progressive-publication pass so 1:/2:/3: and [slot=...] never enter live segments.
-    stream_old = '''                String translatedText = partial.get(j);\n                if (translatedText == null || translatedText.equals(batch.get(j).text)) continue;'''
-    stream_new = '''                String rawTranslatedText = partial.get(j);\n                String translatedText = DubTextSanitizer.cleanForSpeech(rawTranslatedText);\n                if (translatedText == null || translatedText.equals(batch.get(j).text)) continue;\n                if (!translatedText.equals(rawTranslatedText)) {\n                    SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "clean stream slot=" + (offset + j));\n                }'''
+    # Streamed OpenRouter updates used to bypass applyBatch(). There are two callback loops with
+    # slightly different source-placeholder shapes; clean each one independently.
     replace_in_method(
         translator,
         "private static Consumer<List<String>> streamCallback(",
         "\n    @Nullable\n    private static List<String> translateBatchSafe",
-        stream_old, stream_new,
-        "sanitize streamed translation updates", count=2)
+        '''                String translatedText = partial.get(j);\n                if (translatedText == null || translatedText.equals(batch.get(j).text)) continue;''',
+        '''                String rawTranslatedText = partial.get(j);\n                String translatedText = DubTextSanitizer.cleanForSpeech(rawTranslatedText);\n                if (translatedText == null || translatedText.equals(batch.get(j).text)) continue;\n                if (!translatedText.equals(rawTranslatedText)) {\n                    SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "clean stream slot=" + (offset + j));\n                }''',
+        "sanitize streamed provenance update")
+    replace_in_method(
+        translator,
+        "private static Consumer<List<String>> streamCallback(",
+        "\n    @Nullable\n    private static List<String> translateBatchSafe",
+        '''                String translatedText = partial.get(j);\n                TranscriptSegment orig = batch.get(j);\n                if (translatedText == null || translatedText.equals(orig.text)) continue;''',
+        '''                String rawTranslatedText = partial.get(j);\n                String translatedText = DubTextSanitizer.cleanForSpeech(rawTranslatedText);\n                TranscriptSegment orig = batch.get(j);\n                if (translatedText == null || translatedText.equals(orig.text)) continue;\n                if (!translatedText.equals(rawTranslatedText)) {\n                    SpanishStudyDiagnostics.record("TRANSLATION-SANITIZE", "clean stream slot=" + (offset + j));\n                }''',
+        "sanitize streamed transcript publication")
 
     # Quality diagnostics should show what can actually reach subtitles/TTS, not raw protocol text.
     text, start, end, section = method_section(
