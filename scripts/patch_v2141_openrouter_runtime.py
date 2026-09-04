@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v2.14.1: make OpenRouter dispatch observable and fail forward on silent/null results."""
+"""v2.14.1: observable OpenRouter recovery plus side-by-side translation quality trace."""
 from pathlib import Path
 import sys
 
@@ -15,6 +15,13 @@ def main():
     controller = study / "SpanishStudyController.java"
 
     text = translator.read_text(encoding="utf-8")
+
+    import_anchor = '''import app.spanishstudy.vot.TranslationProviderPolicy;'''
+    if text.count(import_anchor) != 1:
+        raise RuntimeError("translation provider import anchor missing")
+    text = text.replace(import_anchor, import_anchor + '''
+import app.spanishstudy.vot.OpenRouterRecoveryPolicy;
+import app.spanishstudy.vot.TranslationQualityLog;''', 1)
 
     # Keep provider/network failures distinct from explicit session/video aborts. Morphe uses the
     # same abortTranslation bit for some fatal provider responses, so that bit alone is not enough
@@ -58,6 +65,7 @@ def main():
     private static List<String> translateBatchSafe(String videoId,
                                                    List<TranscriptSegment> batch, String targetLang,
                                                    @Nullable Consumer<List<String>> onLineStreamed) {
+        TranslationQualityLog.beginVideo(videoId);
         final String selected = Settings.VOT_TRANSLATION_SERVICE.get();
         final String effectiveBefore = TranslationProviderPolicy.effectiveService(
                 selected, openRouterFallbackToGoogle);
@@ -69,9 +77,11 @@ def main():
         List<String> translated = translateBatchSafeOriginal(
                 videoId, batch, targetLang, onLineStreamed);
         if (translated != null && !translated.isEmpty()) {
+            final String effectiveAfter = TranslationProviderPolicy.effectiveService(
+                    selected, openRouterFallbackToGoogle);
             SpanishStudyDiagnostics.record("PROVIDER-RUNTIME", "result provider="
-                    + TranslationProviderPolicy.effectiveService(selected, openRouterFallbackToGoogle)
-                    + " outputs=" + translated.size());
+                    + effectiveAfter + " outputs=" + translated.size());
+            recordTranslationQuality(effectiveAfter, batch, translated);
             return translated;
         }
 
@@ -82,8 +92,8 @@ def main():
         // Some OpenRouter/Morphe failure paths return null instead of propagating an exception.
         // Fail those forward to Google unless the request was explicitly cancelled because the
         // session/video is no longer current or a seek is actively reprioritizing the stream.
-        if (selected.equals(TRANSLATION_SERVICE_OPENROUTER)
-                && !externalAbortRequested && !reprioritize) {
+        if (OpenRouterRecoveryPolicy.shouldFallbackToGoogle(
+                selected, false, externalAbortRequested, reprioritize)) {
             openRouterFallbackToGoogle = true;
             try {
                 List<String> fallback = translateBatchGoogle(videoId, batch, targetLang);
@@ -95,6 +105,7 @@ def main():
                 }
                 SpanishStudyDiagnostics.record("PROVIDER-RUNTIME", "null-result google fallback outputs="
                         + (fallback == null ? -1 : fallback.size()));
+                recordTranslationQuality(TRANSLATION_SERVICE_GOOGLE, batch, fallback);
                 return fallback;
             } catch (Exception fallbackEx) {
                 String msg = fallbackEx.getMessage();
@@ -106,7 +117,25 @@ def main():
                         + fallbackEx.getClass().getSimpleName() + " msg=" + detail);
             }
         }
+        if (!externalAbortRequested && !reprioritize) {
+            recordTranslationQuality(effectiveBefore, batch, translated);
+        }
         return translated;
+    }
+
+    private static void recordTranslationQuality(String provider,
+                                                 List<TranscriptSegment> batch,
+                                                 @Nullable List<String> translated) {
+        String model = TRANSLATION_SERVICE_OPENROUTER.equals(provider)
+                ? Settings.VOT_OPENROUTER_MODEL.get().trim() : "-";
+        List<TranscriptSegment> originals = liveOriginals;
+        for (int i = 0; i < batch.size(); i++) {
+            TranscriptSegment seg = batch.get(i);
+            int globalIndex = originals == null ? -1 : originals.indexOf(seg);
+            String target = translated != null && i < translated.size() ? translated.get(i) : null;
+            TranslationQualityLog.record(provider, model, globalIndex,
+                    seg.startMs, seg.endMs, seg.text, target);
+        }
     }
 
 '''
@@ -161,11 +190,20 @@ def main():
     ctext = ctext.replace(c_anchor, c_anchor + '''
         report.append("openRouterConfigured=").append(TranscriptTranslator.openRouterConfiguredForDiagnostics()).append('\\n');
         report.append("openRouterModel=").append(TranscriptTranslator.openRouterModelForDiagnostics()).append('\\n');
-        report.append("providerRuntimeTelemetry=v2.14.1\\n");''', 1)
+        report.append("providerRuntimeTelemetry=v2.14.1\\n");
+        report.append("translationQualityTrace=recent-120-pairs\\n");''', 1)
+
+    events_anchor = '''        report.append("--- events ---\\n").append(SpanishStudyDiagnostics.dump());'''
+    if ctext.count(events_anchor) != 1:
+        raise RuntimeError(f"diagnostic events anchor count={ctext.count(events_anchor)}")
+    ctext = ctext.replace(events_anchor, events_anchor + '''
+        report.append("--- translation quality (recent 120 pairs) ---\\n")
+                .append(TranslationQualityLog.dump());''', 1)
+
     ctext = ctext.replace('Spanish Dub Study v2.14.0 diagnostics', 'Spanish Dub Study v2.14.1 diagnostics')
     controller.write_text(ctext, encoding="utf-8")
 
-    print("v2.14.1 OpenRouter runtime recovery integration complete")
+    print("v2.14.1 OpenRouter runtime recovery + quality trace integration complete")
 
 
 if __name__ == "__main__":
