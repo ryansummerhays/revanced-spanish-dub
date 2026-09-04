@@ -15,6 +15,32 @@ def main():
     controller = study / "SpanishStudyController.java"
 
     text = translator.read_text(encoding="utf-8")
+
+    # Keep provider/network failures distinct from explicit session/video aborts. Morphe uses the
+    # same abortTranslation bit for some fatal provider responses, so that bit alone is not enough
+    # to decide whether a Google fail-forward would be stale.
+    field_anchor = '''    private static volatile boolean openRouterFallbackToGoogle;'''
+    if text.count(field_anchor) != 1:
+        raise RuntimeError("OpenRouter fallback field anchor missing")
+    text = text.replace(field_anchor, field_anchor + '''
+    // True only when requestAbort() was called because the current translation is no longer wanted.
+    // Provider failures may also set abortTranslation, but must not set this flag.
+    private static volatile boolean externalAbortRequested;''', 1)
+
+    reset_anchor = '''        openRouterFallbackToGoogle = false;'''
+    if text.count(reset_anchor) != 1:
+        raise RuntimeError(f"fallback reset anchor count={text.count(reset_anchor)}")
+    text = text.replace(reset_anchor, reset_anchor + '''
+        externalAbortRequested = false;''', 1)
+
+    abort_anchor = '''    static void requestAbort() {
+        abortTranslation = true;'''
+    if text.count(abort_anchor) != 1:
+        raise RuntimeError(f"requestAbort anchor count={text.count(abort_anchor)}")
+    text = text.replace(abort_anchor, '''    static void requestAbort() {
+        externalAbortRequested = true;
+        abortTranslation = true;''', 1)
+
     signature = '''    @Nullable\n    private static List<String> translateBatchSafe(String videoId,'''
     if text.count(signature) != 1:
         raise RuntimeError(f"translateBatchSafe signature count={text.count(signature)}")
@@ -50,16 +76,23 @@ def main():
         }
 
         SpanishStudyDiagnostics.record("PROVIDER-RUNTIME", "empty-result selected=" + selected
-                + " abort=" + abortTranslation + " reprioritize=" + reprioritize);
+                + " abort=" + abortTranslation + " externalAbort=" + externalAbortRequested
+                + " reprioritize=" + reprioritize);
 
         // Some OpenRouter/Morphe failure paths return null instead of propagating an exception.
-        // If this is an ordinary provider failure (not a seek cut or explicit abort), fail this
-        // batch forward to Google so subtitles/TTS continue instead of remaining English-only.
+        // Fail those forward to Google unless the request was explicitly cancelled because the
+        // session/video is no longer current or a seek is actively reprioritizing the stream.
         if (selected.equals(TRANSLATION_SERVICE_OPENROUTER)
-                && !abortTranslation && !reprioritize) {
+                && !externalAbortRequested && !reprioritize) {
             openRouterFallbackToGoogle = true;
             try {
                 List<String> fallback = translateBatchGoogle(videoId, batch, targetLang);
+                if (fallback != null && !fallback.isEmpty()) {
+                    // A provider-fatal OpenRouter error may have set abortTranslation. The current
+                    // session is still wanted, so clear that generic provider-abort after successful
+                    // Google recovery. requestAbort() is protected by externalAbortRequested above.
+                    abortTranslation = false;
+                }
                 SpanishStudyDiagnostics.record("PROVIDER-RUNTIME", "null-result google fallback outputs="
                         + (fallback == null ? -1 : fallback.size()));
                 return fallback;
