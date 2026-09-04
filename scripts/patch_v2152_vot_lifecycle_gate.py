@@ -39,7 +39,6 @@ def main() -> None:
         if not path.is_file():
             raise RuntimeError(f"missing required source: {path}")
 
-    # sessionEnabled is read by the background transcript worker's cancel check.
     replace_once(
         vot,
         "    private static boolean sessionEnabled = Settings.VOT_SESSION_ENABLED.get();\n",
@@ -47,7 +46,6 @@ def main() -> None:
         "make VOT session state visible to background workers",
     )
 
-    # One authoritative lifecycle predicate for every network/translation entry point.
     replace_once(
         vot,
         '''    /** @return Per-session enabled flag (toggleable via the player button) - not the global setting. */\n    public static boolean isSessionEnabled() {\n        return sessionEnabled;\n    }\n''',
@@ -55,39 +53,33 @@ def main() -> None:
         "add authoritative VOT runtime lifecycle predicate",
     )
 
-    # OFF means OFF: abort translation, stop TTS, kill future prefetch work, and discard any
-    # partially translated transcript so re-enabling always starts a clean active-session load.
     replace_in_method(
         vot,
         "public static void deactivateTranslation()",
         "\n    /** Stops any in-progress TTS without changing session state.",
-        '''        sessionEnabled = false;\n        Settings.VOT_SESSION_ENABLED.save(false);\n        stopTts();\n        lastSpokenIndex = -1;\n        notifyStateChanged();''',
-        '''        sessionEnabled = false;\n        Settings.VOT_SESSION_ENABLED.save(false);\n        TranscriptTranslator.requestAbort();\n        stopTts();\n        TtsPrefetcher.clear();\n        segments = new ArrayList<>();\n        lastSpokenIndex = -1;\n        SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "off abort-translation clear-prefetch");\n        notifyStateChanged();''',
+        '''        sessionEnabled = false;\n        Settings.VOT_SESSION_ENABLED.save(false);\n        stopTts();\n        SpanishStudyController.onSessionDisabled();\n        lastSpokenIndex = -1;\n        notifyStateChanged();''',
+        '''        sessionEnabled = false;\n        Settings.VOT_SESSION_ENABLED.save(false);\n        TranscriptTranslator.requestAbort();\n        stopTts();\n        TtsPrefetcher.clear();\n        segments = new ArrayList<>();\n        SpanishStudyController.onSessionDisabled();\n        lastSpokenIndex = -1;\n        SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "off abort-translation clear-prefetch");\n        notifyStateChanged();''',
         "abort all background VOT work when session turns off",
     )
 
-    # Settings/provider changes can call reloadTranscript even while VOT is off. Make that path
-    # a no-network cleanup operation until the user explicitly turns VOT back on.
     replace_in_method(
         vot,
         "public static void reloadTranscript()",
         "\n    /**\n     * Registers a callback fired whenever toggle/load state changes.",
         '''        Utils.verifyOnMainThread();\n        if (currentVideoId.isEmpty()) return;\n        stopTts();''',
-        '''        Utils.verifyOnMainThread();\n        if (currentVideoId.isEmpty()) return;\n        if (!isVotRuntimeEnabled()) {\n            TranscriptTranslator.requestAbort();\n            TtsPrefetcher.clear();\n            segments = new ArrayList<>();\n            lastSpokenIndex = -1;\n            SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "reload suppressed while off");\n            return;\n        }\n        stopTts();''',
+        '''        Utils.verifyOnMainThread();\n        if (currentVideoId.isEmpty()) return;\n        if (!isVotRuntimeEnabled()) {\n            TranscriptTranslator.requestAbort();\n            TtsPrefetcher.clear();\n            segments = new ArrayList<>();\n            SpanishStudyController.onVideoCleared();\n            lastSpokenIndex = -1;\n            SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "reload suppressed while off");\n            return;\n        }\n        stopTts();''',
         "suppress transcript/provider reload while VOT is off",
     )
 
-    # The private loader is the last-resort gate: no caller can create network activity while OFF.
     replace_in_method(
         vot,
         "private static void loadTranscript(String videoId)",
         "\n    /** Lazily creates the System TTS instance",
-        '''        Logger.printDebug(() -> "loadTranscript: " + videoId);\n        Utils.verifyOnMainThread();\n        if (isLoading) return;''',
-        '''        Logger.printDebug(() -> "loadTranscript: " + videoId);\n        Utils.verifyOnMainThread();\n        if (!isVotRuntimeEnabled()) {\n            SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "load suppressed while off video=" + videoId);\n            return;\n        }\n        if (!videoId.equals(currentVideoId)) {\n            SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "load suppressed stale-video=" + videoId);\n            return;\n        }\n        if (isLoading) return;''',
+        '''        Logger.printDebug(() -> "loadTranscript: " + videoId);\n        Utils.verifyOnMainThread();\n        if (isLoading) {\n            SpanishStudyDiagnostics.record("CAPTIONS", "load ignored because another transcript is loading");\n            return;\n        }\n        SpanishStudyDiagnostics.record("CAPTIONS", "load started video=" + videoId + " hint=" + videoPositionHint);''',
+        '''        Logger.printDebug(() -> "loadTranscript: " + videoId);\n        Utils.verifyOnMainThread();\n        if (!isVotRuntimeEnabled()) {\n            SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "load suppressed while off video=" + videoId);\n            return;\n        }\n        if (!videoId.equals(currentVideoId)) {\n            SpanishStudyDiagnostics.record("VOT-LIFECYCLE", "load suppressed stale-video=" + videoId);\n            return;\n        }\n        if (isLoading) {\n            SpanishStudyDiagnostics.record("CAPTIONS", "load ignored because another transcript is loading");\n            return;\n        }\n        SpanishStudyDiagnostics.record("CAPTIONS", "load started video=" + videoId + " hint=" + videoPositionHint);''',
         "hard-gate transcript loader on active VOT session",
     )
 
-    # Progressive translation callbacks must not repopulate segments after the user turned VOT off.
     replace_in_method(
         vot,
         "private static void loadTranscript(String videoId)",
@@ -97,8 +89,6 @@ def main() -> None:
         "drop progressive translation callbacks after VOT turns off",
     )
 
-    # TranscriptTranslator checks this supplier between batches/retries. Include the session edge
-    # so OpenRouter/Google/MyMemory stops promptly rather than merely hiding its results.
     replace_in_method(
         vot,
         "private static void loadTranscript(String videoId)",
@@ -108,7 +98,6 @@ def main() -> None:
         "cancel translator worker when VOT session turns off",
     )
 
-    # Do not publish a completed fetch after OFF was pressed while a request was in flight.
     replace_in_method(
         vot,
         "private static void loadTranscript(String videoId)",
@@ -118,9 +107,6 @@ def main() -> None:
         "drop final transcript publication after VOT turns off",
     )
 
-    # The previous finally block could restart translation after a provider/language change even
-    # with sessionEnabled=false. Only restart while active. Also restart a clean load when the user
-    # toggled OFF then ON while the old request was unwinding.
     replace_in_method(
         vot,
         "private static void loadTranscript(String videoId)",
@@ -130,7 +116,6 @@ def main() -> None:
         "prevent background translator restart while VOT is off",
     )
 
-    # Make the lifecycle contract visible in copied diagnostics.
     ctext = controller.read_text(encoding="utf-8")
     ctext = ctext.replace("Spanish Dub Study v2.15.1 diagnostics", "Spanish Dub Study v2.15.2 diagnostics")
     ctext = ctext.replace("providerRuntimeTelemetry=v2.15.1", "providerRuntimeTelemetry=v2.15.2")
