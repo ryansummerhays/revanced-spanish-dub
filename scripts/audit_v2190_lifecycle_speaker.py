@@ -52,6 +52,9 @@ def main() -> None:
     require(text["runtime"], "translationWorkerRestartRequests", "worker restart counter")
     require(text["runtime"], "ttsRepeatedStartAttempts", "repeat TTS counter")
     require(text["runtime"], "ttsLateSkips", "late TTS skip counter")
+    require(text["runtime"], "replace((char)10, ' ').replace((char)13, ' ')",
+            "compile-safe telemetry newline sanitization")
+    require(text["runtime"], "System.lineSeparator()", "compile-safe telemetry diagnostic lines")
 
     require(text["sidecar"], 'private static final String DIARIZATION_MODEL = "gemini-3.7-flash"', "speaker model")
     require(text["sidecar"], "SpanishStudyPrefs.speakerApiKey(context)", "speaker-only API key")
