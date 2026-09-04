@@ -116,7 +116,7 @@ jobs:
           python3 scripts/audit_v212_speech_units.py upstream
           python3 scripts/patch_v213_source_speaker_safety.py upstream
           python3 scripts/audit_v213_source_speaker_safety.py upstream
-          python3 scripts/patch_v214_tts_failover_marker_confidence.py upstream
+          python3 scripts/patch_v214_apply.py upstream
           python3 scripts/audit_v214_tts_failover_marker_confidence.py upstream
 
       - name: Build Morphe patch bundle
