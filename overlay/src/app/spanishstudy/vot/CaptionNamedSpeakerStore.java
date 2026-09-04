@@ -17,7 +17,6 @@ public final class CaptionNamedSpeakerStore {
     private static final TreeMap<Long, Integer> TURN_IDENTITIES = new TreeMap<>();
     private static final Map<String, Integer> NAME_TO_INDEX = new LinkedHashMap<>();
     private static final int MAX_SPEAKERS = 8;
-    private static final long NEAR_MS = 500L;
 
     private CaptionNamedSpeakerStore() {}
 
@@ -45,9 +44,12 @@ public final class CaptionNamedSpeakerStore {
         TURN_IDENTITIES.put(Math.max(0L, timeMs), index);
     }
 
-    /** -1 means the caption track does not provide a trustworthy identity at this time. */
+    /**
+     * -1 means the caption track does not provide a trustworthy identity at this time.
+     * Identity lookup is strictly causal: a future speaker marker must never leak backward in time.
+     */
     public static synchronized int speakerIndexAt(long startMs) {
-        Map.Entry<Long, Integer> floor = TURN_IDENTITIES.floorEntry(startMs + NEAR_MS);
+        Map.Entry<Long, Integer> floor = TURN_IDENTITIES.floorEntry(Math.max(0L, startMs));
         return floor == null ? -1 : floor.getValue();
     }
 
