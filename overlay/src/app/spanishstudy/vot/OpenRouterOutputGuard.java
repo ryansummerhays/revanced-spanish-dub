@@ -2,22 +2,10 @@ package app.spanishstudy.vot;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
 /** Pure validation/sanitization for streamed OpenRouter caption output. */
 public final class OpenRouterOutputGuard {
     private OpenRouterOutputGuard() {}
-
-    private static final Pattern SLOT_PREFIX = Pattern.compile(
-            "^\\s*\\[?\\s*slot\\s*=\\s*[^]\\r\\n]+\\]?\\s*:?[ \\t]*",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern DURATION_PREFIX = Pattern.compile(
-            "^\\s*\\[?\\s*\\d+(?:\\.\\d+)?\\s*s\\s*\\]?\\s*:?[ \\t]*",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern TIMESTAMP_PREFIX = Pattern.compile(
-            "^\\s*\\[?\\s*\\d{3,}\\s*[-–—]\\s*\\d{3,}\\s*\\]?\\s*(?:>>)?\\s*:?[ \\t]*");
-    private static final Pattern ONLY_NUMERIC = Pattern.compile("^[\\d\\s.,:;\\-–—]+$");
 
     public static final class ParsedLine {
         public final int index;
@@ -50,27 +38,9 @@ public final class OpenRouterOutputGuard {
         return new ParsedLine(number - 1, cleaned);
     }
 
-    /** Remove prompt-only duration hints while rejecting raw-caption/context echoes. */
+    /** Remove every known translation-protocol marker before a result can become user text. */
     public static String sanitizeTranslation(String text) {
-        if (text == null) return null;
-        String cleaned = text.trim();
-        if (cleaned.isEmpty()) return null;
-
-        cleaned = SLOT_PREFIX.matcher(cleaned).replaceFirst("").trim();
-        cleaned = DURATION_PREFIX.matcher(cleaned).replaceFirst("").trim();
-        if (cleaned.isEmpty()) return null;
-
-        if (TIMESTAMP_PREFIX.matcher(cleaned).find()) return null;
-        String upper = cleaned.toUpperCase(Locale.ROOT);
-        if (upper.startsWith("VIDEO-SPECIFIC CONTEXT")
-                || upper.startsWith("REFERENCE CONTEXT")
-                || upper.equals("<MISSING>")
-                || upper.startsWith("<MISSING>")) {
-            return null;
-        }
-        if (cleaned.startsWith("[") && !cleaned.contains("]")) return null;
-        if (ONLY_NUMERIC.matcher(cleaned).matches()) return null;
-        return cleaned;
+        return DubTextSanitizer.cleanForSpeech(text);
     }
 
     /** Conservative positional recovery; every candidate must pass the same output guard. */

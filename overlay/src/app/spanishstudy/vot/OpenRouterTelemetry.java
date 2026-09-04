@@ -16,6 +16,7 @@ public final class OpenRouterTelemetry {
     private static long reasoningTokens;
     private static double costUsd;
     private static long cardinalityMismatches;
+    private static long finishLengthCount;
     private static long googleFallbackAttempts;
     private static long googleFallbackFailures;
     private static long google429s;
@@ -37,6 +38,7 @@ public final class OpenRouterTelemetry {
         cachedTokens = reasoningTokens = 0;
         costUsd = 0.0;
         cardinalityMismatches = 0;
+        finishLengthCount = 0;
         googleFallbackAttempts = googleFallbackFailures = google429s = 0;
         lastHttpStatus = 0;
         lastLatencyMs = 0;
@@ -60,7 +62,10 @@ public final class OpenRouterTelemetry {
         lastLatencyMs = Math.max(0L, latencyMs);
         if (provider != null && !provider.trim().isEmpty()) lastProvider = compact(provider);
         if (generation != null && !generation.trim().isEmpty()) lastGeneration = compact(generation);
-        if (finishReason != null && !finishReason.trim().isEmpty()) lastFinishReason = compact(finishReason);
+        if (finishReason != null && !finishReason.trim().isEmpty()) {
+            lastFinishReason = compact(finishReason);
+            if ("length".equalsIgnoreCase(finishReason.trim())) finishLengthCount++;
+        }
         if (prompt >= 0) promptTokens += prompt;
         if (completion >= 0) completionTokens += completion;
         if (total >= 0) totalTokens += total;
@@ -120,6 +125,7 @@ public final class OpenRouterTelemetry {
                 + "openRouterReasoningTokens=" + reasoningTokens + '\n'
                 + "openRouterCostUsd=" + String.format(Locale.ROOT, "%.8f", costUsd) + '\n'
                 + "openRouterCardinalityMismatches=" + cardinalityMismatches + '\n'
+                + "openRouterFinishLengthCount=" + finishLengthCount + '\n'
                 + "googleFallbackAttempts=" + googleFallbackAttempts + '\n'
                 + "googleFallbackFailures=" + googleFallbackFailures + '\n'
                 + "googleFallback429s=" + google429s + '\n'
