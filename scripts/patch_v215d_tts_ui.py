@@ -133,8 +133,6 @@ def main() -> None:
 ''',
         "expose normal Morphe provider in study UI")
 
-    # The Java source contains the two-character escape sequence backslash+n. Keep it escaped in
-    # this Python patch string rather than accidentally embedding a literal newline inside a char.
     rep(controller,
         '''        report.append("loading=").append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\\n');''',
         '''        report.append("startupReady=").append(!latest.isEmpty()).append('\\n');
@@ -145,7 +143,8 @@ def main() -> None:
     text = controller.read_text(encoding="utf-8")
     text = text.replace("Spanish Dub Study v2.14.1 diagnostics", "Spanish Dub Study v2.15.0 diagnostics")
     text = text.replace("providerRuntimeTelemetry=v2.14.1", "providerRuntimeTelemetry=v2.15.0")
-    old_batch_diag = '        report.append("startupTranslationBatch=8 segments/600 chars\\n");\n'
+    old_batch_diag = '''        report.append("startupTranslationBatch=").append(StartupTranslationPlanner.MAX_INITIAL_SEGMENTS)
+                .append(" segments/").append(StartupTranslationPlanner.MAX_INITIAL_CHARS).append(" chars\\n");'''
     if old_batch_diag not in text:
         raise RuntimeError("startupTranslationBatch diagnostics anchor missing")
     new_batch_diag = '''        report.append("realtimeTranslationBatch=")
@@ -156,8 +155,7 @@ def main() -> None:
         report.append("translationContext=video-metadata+whole-video-terms+nearby-raw-cues\\n");
         report.append("rawCaptionCues=").append(VideoTranslationContext.rawCueCount()).append('\\n');
         report.append("sourceRepair=local-boundary-repair+implicit-ai-asr-repair\\n");
-        report.append("translationProvenanceEntries=").append(TranslationProvenanceLog.size()).append('\\n');
-'''
+        report.append("translationProvenanceEntries=").append(TranslationProvenanceLog.size()).append('\\n');'''
     text = text.replace(old_batch_diag, new_batch_diag, 1)
     controller.write_text(text, encoding="utf-8")
     print("patched: v2.15 diagnostic header/context/realtime policy")
