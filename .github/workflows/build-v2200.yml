@@ -63,7 +63,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TtsStartPolicyV219Test
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitlePagePolicyV220Test
 
-      - name: Apply audited integration through v2.20
+      - name: Apply and audit integration through v2.20
         run: |
           python3 scripts/normalize_v2160_integration.py scripts/patch_v2160_morphe_core.py
           python3 scripts/normalize_v2190_lifecycle.py scripts/patch_v2190_lifecycle.py
@@ -73,11 +73,11 @@ jobs:
           python3 scripts/patch_v2190_lifecycle.py upstream .
           python3 scripts/patch_v2190_speaker.py upstream .
           python3 scripts/patch_speaker_voices.py upstream
-          python3 scripts/patch_v2200_subtitles.py upstream .
           python3 scripts/audit_v2160_morphe_core.py upstream
           python3 scripts/audit_v2170_followup.py upstream
           python3 scripts/audit_v2180_adaptive_recovery.py upstream
           python3 scripts/audit_v2190_lifecycle_speaker.py upstream
+          python3 scripts/patch_v2200_subtitles.py upstream .
           python3 scripts/audit_v2200_subtitles.py upstream
 
       - name: Build Morphe patch bundle
