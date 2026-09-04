@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """v2.15.0 realtime core: bounded OpenRouter batching, streamed-slot correctness, provenance."""
 from pathlib import Path
-import re
 import sys
 
 
@@ -16,15 +15,6 @@ def rep(path: Path, old: str, new: str, label: str, count: int = 1) -> None:
 
 def insert_after(path: Path, anchor: str, addition: str, label: str) -> None:
     rep(path, anchor, anchor + addition, label)
-
-
-def regex_once(path: Path, pattern: str, repl: str, label: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    updated, count = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE)
-    if count != 1:
-        raise RuntimeError(f"{label}: expected exactly one regex match, found {count} in {path}")
-    path.write_text(updated, encoding="utf-8")
-    print("patched:", label)
 
 
 def main() -> None:
@@ -108,12 +98,16 @@ def main() -> None:
 ''',
         "seek cutter disconnects every OpenRouter stream and adds helper")
 
-    # Match the semantic first-batch block but deliberately ignore comments inserted by earlier
-    # release layers. The following List assignment anchors this to the actual dispatcher body.
-    regex_once(
-        translator,
-        r'''(?P<indent>\s*)if \(firstBatchAfterReposition\) \{\n(?P=indent)    capFirstBatch\(batches, batchDone, index\);\n(?P=indent)\}\n(?P=indent)firstBatchAfterReposition = false;\n(?:[ \t]*//[^\n]*\n)*\n?(?P=indent)List<TranscriptSegment> batch = batches\.get\(index\);''',
-        '''\g<indent>if (firstBatchAfterReposition) {\n\g<indent>    capFirstBatch(batches, batchDone, index);\n\g<indent>}\n\g<indent>firstBatchAfterReposition = false;\n\g<indent>if (isOpenRouter) {\n\g<indent>    capRealtimeBatch(batches, batchDone, index);\n\g<indent>}\n\n\g<indent>List<TranscriptSegment> batch = batches.get(index);''',
+    # Earlier layers may place explanatory comments after this state transition. The transition
+    # itself is unique in the dispatcher, so insert the hard realtime cap directly after it.
+    rep(translator,
+        '''                firstBatchAfterReposition = false;
+''',
+        '''                firstBatchAfterReposition = false;
+                if (isOpenRouter) {
+                    capRealtimeBatch(batches, batchDone, index);
+                }
+''',
         "enforce microbatch size on every OpenRouter dispatch")
 
     cap_end = '''        batches.set(index, head);
