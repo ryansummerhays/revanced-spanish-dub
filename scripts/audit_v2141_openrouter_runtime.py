@@ -15,6 +15,7 @@ def main():
     q = (study / "TranslationQualityLog.java").read_text(encoding="utf-8")
     r = (study / "OpenRouterRecoveryPolicy.java").read_text(encoding="utf-8")
     s = (study / "SessionTogglePolicy.java").read_text(encoding="utf-8")
+    d = (study / "SpeechDispatchPolicy.java").read_text(encoding="utf-8")
     checks = [
         ("v2.14.1 diagnostics", "Spanish Dub Study v2.14.1 diagnostics" in c),
         ("runtime request telemetry", 'record("PROVIDER-RUNTIME", "request selected="' in t),
@@ -43,13 +44,19 @@ def main():
         ("user OFF not suppressed during loading", "player tap while loading; kept enabled" not in v),
         ("user toggle telemetry", '"user button requested "' in v and '" loading=" + isLoading' in v),
         ("automatic policy is enable-only", "nextStateForAutomaticStart" in s and "return true;" in s),
+        ("pending speech reservation exists", "pendingSpeechIndex = -1" in v),
+        ("tested dispatch policy used", "SpeechDispatchPolicy.mayDispatch" in v and "mayDispatch" in d),
+        ("dispatch reserves candidate", "pendingSpeechIndex = i;" in v),
+        ("playback start releases reservation", "pendingSpeechIndex = -1;\n        lastSpokenIndex = index;" in v),
+        ("failed attempt releases reservation", "if (pendingSpeechIndex == index) pendingSpeechIndex = -1;" in v),
+        ("stop clears reservation", 'Logger.printDebug(() -> "stopTts");\n        pendingSpeechIndex = -1;' in v),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
         print(("PASS" if ok else "FAIL") + ": " + name)
     if failed:
         raise SystemExit("v2.14.1 audit failed: " + ", ".join(failed))
-    print(f"v2.14.1 OpenRouter runtime/quality/session audit: {len(checks)} checks passed")
+    print(f"v2.14.1 OpenRouter runtime/quality/session/dispatch audit: {len(checks)} checks passed")
 
 
 if __name__ == "__main__":
