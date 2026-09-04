@@ -10,9 +10,11 @@ def main():
     pkg = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation"
     study = root / "extensions/youtube/src/main/java/app/spanishstudy/vot"
     t = (pkg / "TranscriptTranslator.java").read_text(encoding="utf-8")
+    v = (pkg / "VoiceOverTranslationPatch.java").read_text(encoding="utf-8")
     c = (study / "SpanishStudyController.java").read_text(encoding="utf-8")
     q = (study / "TranslationQualityLog.java").read_text(encoding="utf-8")
     r = (study / "OpenRouterRecoveryPolicy.java").read_text(encoding="utf-8")
+    s = (study / "SessionTogglePolicy.java").read_text(encoding="utf-8")
     checks = [
         ("v2.14.1 diagnostics", "Spanish Dub Study v2.14.1 diagnostics" in c),
         ("runtime request telemetry", 'record("PROVIDER-RUNTIME", "request selected="' in t),
@@ -37,13 +39,17 @@ def main():
         ("quality trace separate bounded buffer", "MAX_PAIRS = 120" in q and "Deque<String> PAIRS" in q),
         ("quality source/target labels", '" | EN: "' in q and '" || ES: "' in q),
         ("quality report copied after events", "--- translation quality (recent 120 pairs) ---" in c),
+        ("explicit user toggle uses tested policy", "SessionTogglePolicy.nextStateForUserPress" in v and "nextStateForUserPress" in s),
+        ("user OFF not suppressed during loading", "player tap while loading; kept enabled" not in v),
+        ("user toggle telemetry", '"user button requested "' in v and '" loading=" + isLoading' in v),
+        ("automatic policy is enable-only", "nextStateForAutomaticStart" in s and "return true;" in s),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
         print(("PASS" if ok else "FAIL") + ": " + name)
     if failed:
         raise SystemExit("v2.14.1 audit failed: " + ", ".join(failed))
-    print(f"v2.14.1 OpenRouter runtime/quality audit: {len(checks)} checks passed")
+    print(f"v2.14.1 OpenRouter runtime/quality/session audit: {len(checks)} checks passed")
 
 
 if __name__ == "__main__":
