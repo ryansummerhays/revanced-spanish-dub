@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v2.15.0: realtime OpenRouter microbatches, video-specific raw-caption context, provenance, and UI cleanup."""
+"""v2.15.0 realtime core: bounded OpenRouter batching, streamed-slot correctness, provenance."""
 from pathlib import Path
 import re
 import sys
@@ -18,40 +18,34 @@ def insert_after(path: Path, anchor: str, addition: str, label: str) -> None:
     rep(path, anchor, anchor + addition, label)
 
 
+def regex_once(path: Path, pattern: str, repl: str, label: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    updated, count = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected exactly one regex match, found {count} in {path}")
+    path.write_text(updated, encoding="utf-8")
+    print("patched:", label)
+
+
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: patch_v215_realtime_context.py <morphe-root>")
+        raise SystemExit("usage: patch_v215b_realtime_core.py <morphe-root>")
     root = Path(sys.argv[1]).resolve()
-    study = root / "extensions/youtube/src/main/java/app/spanishstudy/vot"
     pkg = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation"
-    fetcher = pkg / "TranscriptFetcher.java"
     translator = pkg / "TranscriptTranslator.java"
-    vot = pkg / "VoiceOverTranslationPatch.java"
-    controller = study / "SpanishStudyController.java"
-    sheet = study / "SpanishStudySheet.java"
-    for p in (fetcher, translator, vot, controller, sheet):
-        if not p.is_file():
-            raise RuntimeError(f"missing required source: {p}")
+    if not translator.is_file():
+        raise RuntimeError(f"missing required source: {translator}")
 
-    # ------------------------------------------------------------------------------------------
-    # 2) Bound every realtime OpenRouter batch, not only startup, and allow two small subrequests.
-    # ------------------------------------------------------------------------------------------
-    insert_after(translator,
-                 "import java.util.HashMap;\n",
-                 "import java.util.IdentityHashMap;\n",
+    insert_after(translator, "import java.util.HashMap;\n", "import java.util.IdentityHashMap;\n",
                  "import IdentityHashMap for active OpenRouter connections")
-    insert_after(translator,
-                 "import java.util.Map;\n",
-                 "import java.util.Set;\n",
+    insert_after(translator, "import java.util.Map;\n", "import java.util.Set;\n",
                  "import Set for active OpenRouter connections")
-    insert_after(translator,
-                 "import java.util.concurrent.ExecutionException;\n",
+    insert_after(translator, "import java.util.concurrent.ExecutionException;\n",
                  "import java.util.concurrent.ExecutorService;\n"
                  "import java.util.concurrent.Executors;\n"
                  "import java.util.concurrent.Future;\n",
                  "import bounded OpenRouter parallel executor")
-    insert_after(translator,
-                 "import app.spanishstudy.vot.TranslationQualityLog;\n",
+    insert_after(translator, "import app.spanishstudy.vot.TranslationQualityLog;\n",
                  "import app.spanishstudy.vot.RealtimeTranslationPlanner;\n"
                  "import app.spanishstudy.vot.TranslationProvenanceLog;\n"
                  "import app.spanishstudy.vot.VideoTranslationContext;\n",
@@ -70,7 +64,6 @@ def main() -> None:
 ''',
         "track both concurrent OpenRouter connections")
 
-    # v2.14.1 added externalAbortRequested before these lines.
     rep(translator,
         '''        abortTranslation = true;
         HttpURLConnection conn = activeConnection;
@@ -79,8 +72,8 @@ def main() -> None:
         disconnectActiveConnections();''',
         "abort all concurrent OpenRouter streams")
 
-    # patch_playhead_priority intentionally made onSeek work for non-streaming providers too. Keep
-    # that behavior; only replace the obsolete singleton connection inside the delayed cutter.
+    # patch_playhead_priority intentionally made seek reprioritization provider-agnostic. Preserve
+    # that behavior while replacing only the old singleton streaming connection management.
     rep(translator,
         '''    private static void applySeekCut() {
         HttpURLConnection conn = activeConnection;
@@ -115,26 +108,14 @@ def main() -> None:
 ''',
         "seek cutter disconnects every OpenRouter stream and adds helper")
 
-    # After the existing startup cap, enforce the realtime event cap on every OpenRouter dispatch.
-    rep(translator,
-        '''                if (firstBatchAfterReposition) {
-                    capFirstBatch(batches, batchDone, index);
-                }
-                firstBatchAfterReposition = false;
-
-                List<TranscriptSegment> batch = batches.get(index);''',
-        '''                if (firstBatchAfterReposition) {
-                    capFirstBatch(batches, batchDone, index);
-                }
-                firstBatchAfterReposition = false;
-                if (isOpenRouter) {
-                    capRealtimeBatch(batches, batchDone, index);
-                }
-
-                List<TranscriptSegment> batch = batches.get(index);''',
+    # Match the semantic first-batch block but deliberately ignore comments inserted by earlier
+    # release layers. The following List assignment anchors this to the actual dispatcher body.
+    regex_once(
+        translator,
+        r'''(?P<indent>\s*)if \(firstBatchAfterReposition\) \{\n(?P=indent)    capFirstBatch\(batches, batchDone, index\);\n(?P=indent)\}\n(?P=indent)firstBatchAfterReposition = false;\n(?:[ \t]*//[^\n]*\n)*\n?(?P=indent)List<TranscriptSegment> batch = batches\.get\(index\);''',
+        '''\g<indent>if (firstBatchAfterReposition) {\n\g<indent>    capFirstBatch(batches, batchDone, index);\n\g<indent>}\n\g<indent>firstBatchAfterReposition = false;\n\g<indent>if (isOpenRouter) {\n\g<indent>    capRealtimeBatch(batches, batchDone, index);\n\g<indent>}\n\n\g<indent>List<TranscriptSegment> batch = batches.get(index);''',
         "enforce microbatch size on every OpenRouter dispatch")
 
-    # Add the general realtime cap immediately after the historical startup cap helper.
     cap_end = '''        batches.set(index, head);
         batches.add(index + 1, tail);
         batchDone.add(index + 1, false);
@@ -167,7 +148,6 @@ def main() -> None:
      * Picks the not-yet-translated batch to translate next:'''
     rep(translator, cap_end, cap_new, "add general realtime OpenRouter cap helper")
 
-    # Thread videoId into the stream callback so first-ready provenance can be recorded immediately.
     rep(translator,
         '''                        streamCallback(onUpdate, mainHandler, working, batch, offset, targetLang));''',
         '''                        streamCallback(videoId, onUpdate, mainHandler, working, batch, offset, targetLang));''',
@@ -217,7 +197,6 @@ def main() -> None:
             mainHandler.post(() -> onUpdate.accept(snap));''',
         "publish only actually translated streamed slots")
 
-    # Logical provider request latency and per-video provenance lifecycle.
     rep(translator,
         '''        TranslationQualityLog.beginVideo(videoId);
         final String selected = Settings.VOT_TRANSLATION_SERVICE.get();''',
@@ -234,14 +213,19 @@ def main() -> None:
                     + " elapsedMs=" + (System.currentTimeMillis() - providerRequestStartedMs));''',
         "record logical provider latency")
 
-    # Add videoId to quality recorder calls/signature so non-streamed/fallback translations also have provenance.
     text = translator.read_text(encoding="utf-8")
-    text = text.replace("recordTranslationQuality(effectiveAfter, batch, translated);",
-                        "recordTranslationQuality(videoId, effectiveAfter, batch, translated);")
-    text = text.replace("recordTranslationQuality(TRANSLATION_SERVICE_GOOGLE, batch, fallback);",
-                        "recordTranslationQuality(videoId, TRANSLATION_SERVICE_GOOGLE, batch, fallback);")
-    text = text.replace("recordTranslationQuality(effectiveBefore, batch, translated);",
-                        "recordTranslationQuality(videoId, effectiveBefore, batch, translated);")
+    replacements = {
+        "recordTranslationQuality(effectiveAfter, batch, translated);":
+            "recordTranslationQuality(videoId, effectiveAfter, batch, translated);",
+        "recordTranslationQuality(TRANSLATION_SERVICE_GOOGLE, batch, fallback);":
+            "recordTranslationQuality(videoId, TRANSLATION_SERVICE_GOOGLE, batch, fallback);",
+        "recordTranslationQuality(effectiveBefore, batch, translated);":
+            "recordTranslationQuality(videoId, effectiveBefore, batch, translated);",
+    }
+    for old, new in replacements.items():
+        if old not in text:
+            raise RuntimeError(f"translation quality call anchor missing: {old}")
+        text = text.replace(old, new)
     old_sig = '''    private static void recordTranslationQuality(String provider,
                                                  List<TranscriptSegment> batch,'''
     if text.count(old_sig) != 1:
@@ -260,8 +244,6 @@ def main() -> None:
             }''', 1)
     translator.write_text(text, encoding="utf-8")
     print("patched: final/fallback translation provenance")
-
-
     print("v2.15b realtime core/provenance integration complete")
 
 
