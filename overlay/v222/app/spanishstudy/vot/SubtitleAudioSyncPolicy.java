@@ -20,7 +20,7 @@ public final class SubtitleAudioSyncPolicy {
                                      long audioOffsetMs, float slotRate) {
         long remaining = Math.max(0L, totalSpeechMs - Math.max(0L, audioOffsetMs));
         float rate = Math.max(0.01f, slotRate);
-        return actualStartVideoMs + (long) Math.ceil(remaining / (double) rate);
+        return actualStartVideoMs + Math.round(remaining / (double) rate);
     }
 
     /** Position in the TTS clip when an explicit seek starts playback part-way through it. */
