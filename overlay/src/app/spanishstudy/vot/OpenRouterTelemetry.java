@@ -24,6 +24,11 @@ public final class OpenRouterTelemetry {
     private static String lastProvider = "-";
     private static String lastGeneration = "-";
     private static String lastFinishReason = "-";
+    private static String lastRouteStrategy = "-";
+    private static String lastRouteRegion = "-";
+    private static int lastRouteAttempt;
+    private static String lastRouteSummary = "-";
+    private static String lastRouteAttempts = "-";
     private static String lastError = "none";
 
     public static synchronized void resetSession() {
@@ -35,7 +40,9 @@ public final class OpenRouterTelemetry {
         googleFallbackAttempts = googleFallbackFailures = google429s = 0;
         lastHttpStatus = 0;
         lastLatencyMs = 0;
+        lastRouteAttempt = 0;
         lastProvider = lastGeneration = lastFinishReason = "-";
+        lastRouteStrategy = lastRouteRegion = lastRouteSummary = lastRouteAttempts = "-";
         lastError = "none";
     }
 
@@ -51,9 +58,9 @@ public final class OpenRouterTelemetry {
         successes++;
         lastHttpStatus = httpStatus;
         lastLatencyMs = Math.max(0L, latencyMs);
-        if (provider != null && !provider.trim().isEmpty()) lastProvider = provider.trim();
-        if (generation != null && !generation.trim().isEmpty()) lastGeneration = generation.trim();
-        if (finishReason != null && !finishReason.trim().isEmpty()) lastFinishReason = finishReason.trim();
+        if (provider != null && !provider.trim().isEmpty()) lastProvider = compact(provider);
+        if (generation != null && !generation.trim().isEmpty()) lastGeneration = compact(generation);
+        if (finishReason != null && !finishReason.trim().isEmpty()) lastFinishReason = compact(finishReason);
         if (prompt >= 0) promptTokens += prompt;
         if (completion >= 0) completionTokens += completion;
         if (total >= 0) totalTokens += total;
@@ -61,6 +68,17 @@ public final class OpenRouterTelemetry {
         if (reasoning >= 0) reasoningTokens += reasoning;
         if (!Double.isNaN(cost) && !Double.isInfinite(cost) && cost >= 0.0) costUsd += cost;
         lastError = "none";
+    }
+
+    public static synchronized void recordRouterMetadata(String strategy, String region, int attempt,
+                                                         String summary, String selectedProvider,
+                                                         String attempts) {
+        if (strategy != null && !strategy.trim().isEmpty()) lastRouteStrategy = compact(strategy);
+        if (region != null && !region.trim().isEmpty() && !"null".equals(region)) lastRouteRegion = compact(region);
+        if (attempt >= 0) lastRouteAttempt = attempt;
+        if (summary != null && !summary.trim().isEmpty()) lastRouteSummary = compact(summary);
+        if (attempts != null && !attempts.trim().isEmpty()) lastRouteAttempts = compact(attempts);
+        if (selectedProvider != null && !selectedProvider.trim().isEmpty()) lastProvider = compact(selectedProvider);
     }
 
     public static synchronized void recordFailure(int httpStatus, long latencyMs, String error) {
@@ -87,7 +105,7 @@ public final class OpenRouterTelemetry {
     private static String compact(String text) {
         if (text == null || text.trim().isEmpty()) return "unknown";
         String value = text.replace('\n', ' ').replace('\r', ' ').trim();
-        return value.length() <= 120 ? value : value.substring(0, 120);
+        return value.length() <= 160 ? value : value.substring(0, 160);
     }
 
     /** Ready to append directly to the copied diagnostics report. */
@@ -110,6 +128,11 @@ public final class OpenRouterTelemetry {
                 + "openRouterLastProvider=" + lastProvider + '\n'
                 + "openRouterLastGeneration=" + lastGeneration + '\n'
                 + "openRouterLastFinishReason=" + lastFinishReason + '\n'
+                + "openRouterLastRouteStrategy=" + lastRouteStrategy + '\n'
+                + "openRouterLastRouteRegion=" + lastRouteRegion + '\n'
+                + "openRouterLastRouteAttempt=" + lastRouteAttempt + '\n'
+                + "openRouterLastRouteSummary=" + lastRouteSummary + '\n'
+                + "openRouterLastRouteAttempts=" + lastRouteAttempts + '\n'
                 + "openRouterLastError=" + lastError + '\n';
     }
 }
