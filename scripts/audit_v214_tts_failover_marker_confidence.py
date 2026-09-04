@@ -14,6 +14,7 @@ def main():
         "vot": (votpkg / "VoiceOverTranslationPatch.java").read_text(encoding="utf-8"),
         "prefetch": (votpkg / "TtsPrefetcher.java").read_text(encoding="utf-8"),
         "translator": (votpkg / "TranscriptTranslator.java").read_text(encoding="utf-8"),
+        "picker": (votpkg / "VotBottomSheet.java").read_text(encoding="utf-8"),
         "fetcher": (votpkg / "TranscriptFetcher.java").read_text(encoding="utf-8"),
         "controller": (study / "SpanishStudyController.java").read_text(encoding="utf-8"),
         "markers": (study / "CaptionSpeakerTurnStore.java").read_text(encoding="utf-8"),
@@ -29,6 +30,11 @@ def main():
         ("OpenRouter Google fallback exposed", "translationFallback=google-on-openrouter-failure" in files["controller"]),
         ("normal Morphe provider restored", "String service = Settings.VOT_TRANSLATION_SERVICE.get();" in files["translator"]
             and "final boolean isOpenRouter = service.equals(TRANSLATION_SERVICE_OPENROUTER);" in files["translator"]),
+        ("provider picker retains Google", "TRANSLATION_SERVICE_GOOGLE" in files["picker"]),
+        ("provider picker retains MyMemory", "TRANSLATION_SERVICE_MY_MEMORY" in files["picker"]),
+        ("provider picker retains OpenRouter", "TRANSLATION_SERVICE_OPENROUTER" in files["picker"]),
+        ("provider switch persists selection", "Settings.VOT_TRANSLATION_SERVICE.save(value);" in files["picker"]),
+        ("provider switch reloads active transcript", "VoiceOverTranslationPatch.reloadTranscript();" in files["picker"]),
         ("tested provider policy wired", "TranslationProviderPolicy.shouldUseOpenRouter" in files["translator"]
             and "TranslationProviderPolicy.shouldFallbackToGoogle" in files["translator"]),
         ("OpenRouter fallback latched per session", "openRouterFallbackToGoogle" in files["translator"]
