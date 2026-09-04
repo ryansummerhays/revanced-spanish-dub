@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""v2.15.0: realtime OpenRouter microbatches, video-specific raw-caption context, provenance, and UI cleanup."""
+"""v2.15.0: TTS provenance, scheduler diagnostics, and study UI cleanup."""
 from pathlib import Path
-import re
 import sys
 
 
@@ -20,21 +19,19 @@ def insert_after(path: Path, anchor: str, addition: str, label: str) -> None:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: patch_v215_realtime_context.py <morphe-root>")
+        raise SystemExit("usage: patch_v215d_tts_ui.py <morphe-root>")
     root = Path(sys.argv[1]).resolve()
     study = root / "extensions/youtube/src/main/java/app/spanishstudy/vot"
     pkg = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation"
-    fetcher = pkg / "TranscriptFetcher.java"
-    translator = pkg / "TranscriptTranslator.java"
     vot = pkg / "VoiceOverTranslationPatch.java"
     controller = study / "SpanishStudyController.java"
     sheet = study / "SpanishStudySheet.java"
-    for p in (fetcher, translator, vot, controller, sheet):
+    for p in (vot, controller, sheet):
         if not p.is_file():
             raise RuntimeError(f"missing required source: {p}")
 
     # ------------------------------------------------------------------------------------------
-    # 3) TTS/scheduler provenance and completion visibility.
+    # TTS/scheduler provenance and completion visibility.
     # ------------------------------------------------------------------------------------------
     rep(controller,
         '''    public static void onDubAudioReady(TranscriptSegment segment,int index,long durationMs){
@@ -62,12 +59,13 @@ def main() -> None:
     }''',
         "diagnose TTS completion")
 
-    rep(controller,
+    # Earlier release layers add other per-video cleanup calls between these stores, so anchor only
+    # to the correction-store reset and add provenance cleanup immediately beside it.
+    insert_after(controller,
         '''        TranscriptCorrectionStore.clear();
-        DubEventStateStore.clear();''',
-        '''        TranscriptCorrectionStore.clear();
-        TranslationProvenanceLog.clear();
-        DubEventStateStore.clear();''',
+''',
+        '''        TranslationProvenanceLog.clear();
+''',
         "clear translation provenance per video")
 
     # One diagnostic line per blocked candidate rather than flooding every video-time tick.
@@ -112,7 +110,7 @@ def main() -> None:
         "clear scheduler block marker on stop/seek/video change")
 
     # ------------------------------------------------------------------------------------------
-    # 4) Diagnostics/UI truthfulness and cleanup.
+    # Diagnostics/UI truthfulness and cleanup.
     # ------------------------------------------------------------------------------------------
     insert_after(controller,
                  "import app.morphe.extension.youtube.patches.voiceovertranslation.VoiceOverTranslationPatch;\n",
@@ -137,7 +135,6 @@ def main() -> None:
 ''',
         "expose normal Morphe provider in study UI")
 
-    # Rewrite misleading long-lived loading label while preserving the true background state.
     rep(controller,
         '''        report.append("loading=").append(VoiceOverTranslationPatch.isTranscriptLoading()).append('\n');''',
         '''        report.append("startupReady=").append(!latest.isEmpty()).append('\n');
@@ -165,7 +162,6 @@ def main() -> None:
     controller.write_text(text, encoding="utf-8")
     print("patched: v2.15 diagnostic header/context/realtime policy")
 
-    # Replace the obsolete Gemini-specific control with the provider Morphe actually uses.
     rep(sheet,
         '''        LinearLayout geminiRow=valueRow(activity,fg,"Gemini settings",
                 SpanishStudyPrefs.geminiApiKey(activity).trim().isEmpty()
@@ -187,7 +183,6 @@ def main() -> None:
         content.addView(translationNote);''',
         "show authoritative Morphe translation provider")
 
-    # Shorten the most verbose explanatory blocks; settings remain unchanged.
     text = sheet.read_text(encoding="utf-8")
     replacements = {
         "Paired bilingual layout: Spanish on top and the exact matching English source below. Both switch on one shared source-video event. Short sentences stay whole; longer speech prefers real punctuation and source timing pauses. If no trustworthy pause exists, the phrase stays together rather than being chopped at an arbitrary width.":
@@ -205,8 +200,6 @@ def main() -> None:
         text = text.replace(old, new, 1)
     sheet.write_text(text, encoding="utf-8")
     print("patched: concise Spanish study UI copy")
-
-
     print("v2.15d TTS/scheduler/UI integration complete")
 
 
