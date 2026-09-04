@@ -27,14 +27,16 @@ def main() -> None:
     require(translator, "RealtimeTranslationPlanner.openRouterMaxOutputTokens", "dynamic output budget")
     require(translator, '.put("max_tokens", maxOutputTokens)', "dynamic max_tokens request")
     require(translator, '" finish=" + finishReason + " maxTokens=" + maxOutputTokens', "per-request finish logging")
+    require(translator, '!"length".equalsIgnoreCase(finishReason)', "length-tail suppression")
+    require(translator, "OpenRouter output truncated at max token budget", "length response rejection")
     if '.put("max_tokens", segments.size() * 30)' in translator:
         raise RuntimeError("old 30-token-per-segment OpenRouter cap still present")
 
     require(vot, "TTS-SANITIZE", "final TTS firewall diagnostics")
     require(vot, "DubTextSanitizer.cleanForSpeech(seg.text)", "final TTS firewall")
-    require(vot, "tts.speak(speechText", "System TTS uses sanitized text")
-    require(vot, "ttsEngine.prefetch(speechText", "Edge TTS uses sanitized text")
-    require(vot, "getSpeechDurationMs(seg, index, voice, lang, speechText)", "sanitized duration key")
+    require(vot, "blocked residual protocol metadata", "fail-closed contaminated TTS")
+    require(vot, "pendingSpeechIndex == index", "TTS firewall releases reservation")
+    require(vot, "onDubPlaybackSkipped(seg, index)", "TTS firewall advances skipped event")
 
     require(controller, "return false;", "speaker routing hard off")
     require(controller, "Spanish Dub Study v2.15.3 diagnostics", "diagnostic version")
