@@ -1,10 +1,10 @@
-name: Build Spanish Dub Study v2.14.0 audible-startup bundle
+name: Build Spanish Dub Study v2.14.0 final provider-toggle bundle
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - release/v2.14.0-audible-startup
+      - release/v2.14.0-final-openrouter
 
 permissions:
   contents: read
@@ -47,6 +47,7 @@ jobs:
             overlay/src/app/spanishstudy/vot/SpeechUnitPlanner.java \
             overlay/src/app/spanishstudy/vot/StartupSpeechPolicy.java \
             overlay/src/app/spanishstudy/vot/StartupTranslationPlanner.java \
+            overlay/src/app/spanishstudy/vot/TranslationProviderPolicy.java \
             overlay/src/app/spanishstudy/vot/TranslationAlignmentGuard.java \
             overlay/src/app/spanishstudy/vot/TranscriptCorrectionStore.java \
             overlay/src/app/spanishstudy/vot/SourceExpressionMath.java \
@@ -56,6 +57,7 @@ jobs:
             tests/EdgeFallbackPolicyTest.java tests/SemanticClauseSplitterTest.java \
             tests/SourceCaptionTimingStoreTest.java tests/SpeechUnitPlannerTest.java \
             tests/StartupSpeechPolicyTest.java tests/StartupTranslationPlannerTest.java \
+            tests/TranslationProviderPolicyTest.java \
             tests/TranslationAlignmentGuardTest.java tests/TranscriptCorrectionStoreTest.java \
             tests/SourceExpressionMathTest.java tests/NaturalProsodyFormatterTest.java \
             tests/WholeTranscriptDesignTest.java
@@ -69,6 +71,7 @@ jobs:
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SpeechUnitPlannerTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.StartupSpeechPolicyTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.StartupTranslationPlannerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationProviderPolicyTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranslationAlignmentGuardTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.TranscriptCorrectionStoreTest
           java -cp /tmp/spanish-study-test app.spanishstudy.vot.SourceExpressionMathTest
@@ -128,6 +131,8 @@ jobs:
           python3 scripts/patch_v214_audible_startup.py upstream
           python3 scripts/patch_v214_visibility_fix.py upstream
           python3 scripts/audit_v214_audible_startup.py upstream
+          python3 scripts/patch_v214_openrouter_final.py upstream
+          python3 scripts/audit_v214_openrouter_final.py upstream
 
       - name: Build Morphe patch bundle
         working-directory: upstream
@@ -145,7 +150,7 @@ jobs:
           srcs=glob.glob('upstream/patches/build/libs/*.mpp')
           if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
           src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.14.0.mpp'
-          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.0\nDescription: Local-first audible-startup reliability release. Keeps v2.13 English-first captions, pause-aware 2.4s speech units, and provisional speaker boundaries. Adds small first Google translation batches, speech-backend warmup when enabling late, stale-video TTS generation guards, a temporary genuinely-offline Android Spanish TTS fallback after repeated Edge failures, and explicit caption-named speaker identity without guessing bare marker identity. Based on Morphe 1.41.0\nVersion: 2.14.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.14.0\nDescription: Final v2.14 reliability/provider release. Keeps audible-startup microbatches, stale-video TTS guards, Edge warmup and genuinely-offline Android Spanish fallback, English-first captions, pause-aware speech units, and explicit caption-named speaker identities. Restores Morphe's normal Google/MyMemory/OpenRouter provider toggle, uses Morphe's native streaming OpenRouter path when selected, fails ordinary OpenRouter errors forward to Google for the current translation session without changing the saved provider, keeps Gemini runtime disabled, and treats bare >> caption cues as untrusted rather than confirmed speaker changes. Based on Morphe 1.41.0\nVersion: 2.14.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
               for info in zin.infolist():
                   zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
@@ -157,7 +162,7 @@ jobs:
       - name: Upload v2.14.0 bundle
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-study-patches-v2.14.0
+          name: spanish-dub-study-patches-v2.14.0-final
           path: dist/
           if-no-files-found: error
           retention-days: 30
