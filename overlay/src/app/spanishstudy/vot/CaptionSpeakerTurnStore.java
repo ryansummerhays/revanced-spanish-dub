@@ -4,19 +4,23 @@ import java.util.NavigableSet;
 import java.util.TreeSet;
 
 /**
- * Lightweight local speaker-turn side data derived from explicit caption markup such as ">>".
+ * Lightweight local caption-turn side data derived from explicit markup such as ">>".
  *
- * A bare marker is only a boundary signal. When the caption explicitly names a speaker after the
- * marker, {@link CaptionNamedSpeakerStore} may additionally provide a trustworthy local identity.
+ * A bare ">>" is not trustworthy evidence that the human speaker changed: some YouTube tracks use
+ * it as a cue/paragraph marker on nearly every caption. We retain every marker for diagnostics and
+ * named-speaker extraction, but only an explicitly labelled marker such as ">> JOHN:" becomes a
+ * hard speaker boundary. Future local acoustic diarization can add stronger boundaries upstream.
  */
 public final class CaptionSpeakerTurnStore {
-    private static final NavigableSet<Long> TURN_STARTS_MS = new TreeSet<>();
+    private static final NavigableSet<Long> ALL_MARKERS_MS = new TreeSet<>();
+    private static final NavigableSet<Long> HARD_TURN_STARTS_MS = new TreeSet<>();
     private static final long NEAR_TOLERANCE_MS = 450L;
 
     private CaptionSpeakerTurnStore() {}
 
     public static synchronized void beginTranscript() {
-        TURN_STARTS_MS.clear();
+        ALL_MARKERS_MS.clear();
+        HARD_TURN_STARTS_MS.clear();
         CaptionNamedSpeakerStore.beginTranscript();
     }
 
@@ -36,8 +40,13 @@ public final class CaptionSpeakerTurnStore {
             double fraction = at / (double) Math.max(1, rawText.length());
             long time = safeStart + Math.round(span * fraction);
             time = Math.max(safeStart, Math.min(safeEnd, time));
-            TURN_STARTS_MS.add(time);
-            CaptionNamedSpeakerStore.markTurn(time, rawText.substring(Math.min(rawText.length(), at + 2)));
+            ALL_MARKERS_MS.add(time);
+
+            String after = rawText.substring(Math.min(rawText.length(), at + 2));
+            CaptionNamedSpeakerStore.markTurn(time, after);
+            if (CaptionNamedSpeakerStore.extractName(after) != null) {
+                HARD_TURN_STARTS_MS.add(time);
+            }
             from = at + 2;
         }
     }
@@ -46,21 +55,27 @@ public final class CaptionSpeakerTurnStore {
         return rawText == null ? "" : rawText.replace(">>", " ").replaceAll("\\s+", " ").trim();
     }
 
-    /** True when an explicit turn marker falls between two adjacent lexical words. */
+    /** True only when a high-confidence explicitly-labelled speaker boundary falls between words. */
     public static synchronized boolean hasBoundaryBetween(long leftEndMs, long rightStartMs) {
         long lo = Math.min(leftEndMs, rightStartMs) - NEAR_TOLERANCE_MS;
         long hi = Math.max(leftEndMs, rightStartMs) + NEAR_TOLERANCE_MS;
-        Long turn = TURN_STARTS_MS.ceiling(lo);
+        Long turn = HARD_TURN_STARTS_MS.ceiling(lo);
         return turn != null && turn <= hi;
     }
 
-    /** True when a generated phrase begins at/very near an explicit caption speaker turn. */
+    /** True only when a generated phrase begins near a labelled caption speaker turn. */
     public static synchronized boolean isTurnStartNear(long timeMs) {
-        Long floor = TURN_STARTS_MS.floor(timeMs + NEAR_TOLERANCE_MS);
+        Long floor = HARD_TURN_STARTS_MS.floor(timeMs + NEAR_TOLERANCE_MS);
         return floor != null && Math.abs(floor - timeMs) <= NEAR_TOLERANCE_MS;
     }
 
+    /** Number of high-confidence caption-provided speaker boundaries. */
     public static synchronized int count() {
-        return TURN_STARTS_MS.size();
+        return HARD_TURN_STARTS_MS.size();
+    }
+
+    /** Number of raw ">>" cue markers, including markers that are not speaker evidence. */
+    public static synchronized int markerCount() {
+        return ALL_MARKERS_MS.size();
     }
 }
