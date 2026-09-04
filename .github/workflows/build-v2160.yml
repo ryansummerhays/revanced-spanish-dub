@@ -51,6 +51,7 @@ jobs:
 
       - name: Apply one Morphe-core integration layer
         run: |
+          python3 scripts/normalize_v2160_integration.py scripts/patch_v2160_morphe_core.py
           python3 scripts/patch_v2160_morphe_core.py upstream overlay/src overlay/v216
           python3 scripts/audit_v2160_morphe_core.py upstream
 
