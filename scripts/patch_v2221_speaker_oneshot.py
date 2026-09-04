@@ -40,8 +40,8 @@ def main() -> None:
 
     rep(sidecar,
         '''    private static final int MAX_EVENTS_PER_WINDOW = 48;''',
-        '''    private static final int MAX_EVENTS_PER_WINDOW = 1200;''',
-        "allow full caption timeline in one speaker request")
+        '''    private static final int MAX_EVENTS_PER_WINDOW = 700;''',
+        "bound full-video speaker response below model output ceiling")
 
     rep(sidecar,
         '''    private static boolean inFlight;''',
@@ -68,13 +68,20 @@ def main() -> None:
         "stop scheduling after full-video speaker map succeeds")
 
     new_select = '''    private static List<TranscriptSegment> selectWindow(List<TranscriptSegment> source, long playheadMs) {
-        ArrayList<TranscriptSegment> out = new ArrayList<>();
-        for (TranscriptSegment seg : source) {
-            if (seg == null) continue;
-            out.add(seg);
-            if (out.size() >= MAX_EVENTS_PER_WINDOW) break;
+        ArrayList<TranscriptSegment> valid = new ArrayList<>();
+        for (TranscriptSegment seg : source) if (seg != null) valid.add(seg);
+        if (valid.size() <= MAX_EVENTS_PER_WINDOW) return valid;
+
+        // Uniformly cover the whole video instead of truncating to its beginning. Existing
+        // bounded profile propagation fills the small gaps between sampled caption events.
+        ArrayList<TranscriptSegment> sampled = new ArrayList<>(MAX_EVENTS_PER_WINDOW);
+        for (int i = 0; i < MAX_EVENTS_PER_WINDOW; i++) {
+            int index = (int) Math.round(i * (valid.size() - 1.0)
+                    / Math.max(1.0, MAX_EVENTS_PER_WINDOW - 1.0));
+            TranscriptSegment seg = valid.get(index);
+            if (sampled.isEmpty() || sampled.get(sampled.size() - 1) != seg) sampled.add(seg);
         }
-        return out;
+        return sampled;
     }
 
 '''
@@ -82,7 +89,7 @@ def main() -> None:
                     "    private static List<TranscriptSegment> selectWindow(",
                     "    private static List<SpeakerAssignmentStore.Proposal> request(",
                     new_select,
-                    "select the full caption timeline rather than rolling windows")
+                    "sample the full caption timeline rather than rolling windows")
 
     rep(sidecar,
         '''        final long clipStartMs = Math.max(0L, playheadMs - WINDOW_BEHIND_MS);
@@ -132,6 +139,12 @@ def main() -> None:
         '''                .append(SpeakerAssignmentStore.rosterPrompt()).append("\\n\\nEVENTS IN CURRENT WINDOW:\\n");''',
         '''                .append(SpeakerAssignmentStore.rosterPrompt()).append("\\n\\nCAPTION EVENTS ACROSS FULL VIDEO:\\n");''',
         "label full-video event list")
+
+    rep(sidecar,
+        '''                        .put("max_output_tokens", Math.max(1200, segments.size() * 80)))''',
+        '''                        .put("max_output_tokens", Math.min(60_000,
+                                Math.max(1200, segments.size() * 80))))''',
+        "cap one-shot structured output allowance")
 
     rep(controller,
         '''        report.append("speakerCostTelemetry=interactions-usage+hypothetical-paid-estimate\\n");''',
