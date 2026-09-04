@@ -124,6 +124,7 @@ jobs:
           python3 scripts/audit_v212_speech_units.py upstream
           python3 scripts/patch_v213_source_speaker_safety.py upstream
           python3 scripts/audit_v213_source_speaker_safety.py upstream
+          python3 scripts/patch_v214_precompat.py upstream
           python3 scripts/patch_v214_audible_startup.py upstream
           python3 scripts/patch_v214_visibility_fix.py upstream
           python3 scripts/audit_v214_audible_startup.py upstream
