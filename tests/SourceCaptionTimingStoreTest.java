@@ -6,7 +6,8 @@ public final class SourceCaptionTimingStoreTest {
     public static void main(String[] args) {
         usesInnerCaptionTiming();
         exposesMeasuredInterWordPause();
-        promotesSpeakerTurnToHardPause();
+        promotesLabelledSpeakerTurnToHardPause();
+        bareCueDoesNotPretendSpeakerChange();
         rejectsAmbiguousAlignment();
         System.out.println("source caption timing store: OK");
     }
@@ -43,7 +44,21 @@ public final class SourceCaptionTimingStoreTest {
         require(gaps[1] < 200, "normal within-speech transition should stay small, got " + gaps[1]);
     }
 
-    private static void promotesSpeakerTurnToHardPause() {
+    private static void promotesLabelledSpeakerTurnToHardPause() {
+        CaptionSpeakerTurnStore.beginTranscript();
+        SourceCaptionTimingStore.beginTranscript();
+        SourceCaptionTimingStore.addTimedChunk(0, 1000, "I agree ");
+        CaptionSpeakerTurnStore.markFromChunk(1000, 1050, ">> MARY:");
+        SourceCaptionTimingStore.addTimedChunk(1050, 2000, "no wait");
+
+        long[] gaps = SourceCaptionTimingStore.interWordGaps(
+                0, 2000, "I agree no wait");
+        require(gaps != null && gaps.length == 3, "expected aligned labelled speaker-turn sentence");
+        require(gaps[1] >= 1000,
+                "explicit labelled speaker change must act as a hard phrase pause, got " + gaps[1]);
+    }
+
+    private static void bareCueDoesNotPretendSpeakerChange() {
         CaptionSpeakerTurnStore.beginTranscript();
         SourceCaptionTimingStore.beginTranscript();
         SourceCaptionTimingStore.addTimedChunk(0, 1000, "I agree ");
@@ -52,9 +67,9 @@ public final class SourceCaptionTimingStoreTest {
 
         long[] gaps = SourceCaptionTimingStore.interWordGaps(
                 0, 2000, "I agree no wait");
-        require(gaps != null && gaps.length == 3, "expected aligned speaker-turn sentence");
-        require(gaps[1] >= 1000,
-                "explicit speaker change must act as a hard phrase pause, got " + gaps[1]);
+        require(gaps != null && gaps.length == 3, "expected aligned bare-cue sentence");
+        require(gaps[1] < 1000,
+                "bare caption cue must not manufacture a hard speaker pause, got " + gaps[1]);
     }
 
     private static void rejectsAmbiguousAlignment() {
