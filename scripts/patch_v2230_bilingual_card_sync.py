@@ -27,7 +27,10 @@ def main():
 '''        translatedPages.clear();\n        pairedPages.clear();\n    }\n\n    static void setSourceSegments''','clear pair cache on translated update')
     rep(ov,
 '''        sourcePages.clear();\n        translatedPages.clear();\n        progressFloors.clear();''',
-'''        sourcePages.clear();\n        translatedPages.clear();\n        pairedPages.clear();\n        progressFloors.clear();''','clear pair cache on source update',2)
+'''        sourcePages.clear();\n        translatedPages.clear();\n        pairedPages.clear();\n        progressFloors.clear();''','clear pair cache on source update')
+    rep(ov,
+'''        translatedPages.clear();\n        sourcePages.clear();\n        progressFloors.clear();''',
+'''        translatedPages.clear();\n        sourcePages.clear();\n        pairedPages.clear();\n        progressFloors.clear();''','clear pair cache on overlay clear')
 
     old='''        ShownPage sourcePage = pageFor(sourcePages, pairSourceIndex,\n                source == null ? "" : source.text, progress);\n        ShownPage translatedPage = pageFor(translatedPages, displayIndex,\n                translated == null ? "" : translated.text, progress);'''
     new='''        ShownPage sourcePage;\n        ShownPage translatedPage;\n        if (hasDubText && source != null && displayIndex >= 0) {\n            BilingualCardPolicy.PairPages pair = pairedPages.get(displayIndex);\n            if (pair == null) {\n                pair = BilingualCardPolicy.build(translated.text, source.text);\n                pairedPages.put(displayIndex, pair);\n            }\n            int sharedPage = BilingualCardPolicy.pairIndex(pair.size(), progress);\n            translatedPage = pairedPage(pair.spanish, sharedPage);\n            sourcePage = pairedPage(pair.english, sharedPage);\n        } else {\n            sourcePage = pageFor(sourcePages, pairSourceIndex, source == null ? "" : source.text, progress);\n            translatedPage = pageFor(translatedPages, displayIndex, translated == null ? "" : translated.text, progress);\n        }'''
