@@ -51,6 +51,7 @@ jobs:
       - name: Apply deep diagnostic and local speaker integration
         run: |
           python3 scripts/patch_v2280_deep_diagnostics_local_diarization.py upstream .
+          python3 scripts/tune_v2280_local_speaker.py upstream
           python3 scripts/audit_v2280_deep_diagnostics_local_diarization.py upstream
 
       - name: Build Morphe patch bundle
@@ -69,7 +70,7 @@ jobs:
           srcs=glob.glob('upstream/patches/build/libs/*.mpp')
           if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
           src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.28.0.mpp'
-          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.28.0\nDescription: Keeps the stock Morphe v1.41.0 sentence-sized VOT speech architecture and the user's OpenRouter/Mistral translator, while adding a component-selectable 3000-line diagnostic trace around caption fetch/merge, translation batching/streaming/cardinality, TTS cache/prefetch/synthesis/playback timing, subtitles, lifecycle/seeks, and local source-audio speaker analysis. Remote Gemini/OpenRouter video diarization is removed. Speaker analysis is a zero-API-cost experimental local probe using Android Visualizer attached to YouTube's existing AudioTrack session, extracting anonymous acoustic features and clustering caption speech into A/B/C/D labels. It does not use the microphone and does not change Morphe TTS voice routing in this release.\nVersion: 2.28.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.28.0\nDescription: Keeps the stock Morphe v1.41.0 sentence-sized VOT speech architecture and the user's OpenRouter/Mistral translator, while adding a component-selectable 3000-line diagnostic trace around caption fetch/merge, translation batching/streaming/cardinality, TTS cache/prefetch/synthesis/playback timing, subtitles, lifecycle/seeks, and local source-audio speaker analysis. Remote Gemini/OpenRouter video diarization is removed. Speaker analysis is a zero-API-cost experimental local probe using Android Visualizer attached to YouTube's existing AudioTrack session, with normalized capture scaling, extracting anonymous acoustic features and clustering caption speech into A/B/C/D labels. It does not use a paid diarization API and does not change Morphe TTS voice routing in this release.\nVersion: 2.28.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
           with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
               for info in zin.infolist():
                   zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
