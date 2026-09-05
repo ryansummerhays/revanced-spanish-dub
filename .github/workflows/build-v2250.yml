@@ -1,0 +1,129 @@
+name: Build Spanish Dub Study v2.25.0 cheap speaker names + subtitle style
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.25.0-cheap-speaker-names-subtitle-style
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Test pure integrity through v2.25
+        run: |
+          rm -rf /tmp/spanish-study-test && mkdir -p /tmp/spanish-study-test
+          javac -d /tmp/spanish-study-test \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/src/app/spanishstudy/vot/CaptionTrackPreference.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v217/app/spanishstudy/vot/DubLanguageGuard.java \
+            overlay/v217/app/spanishstudy/vot/OpenRouterTelemetry.java \
+            overlay/v217/app/spanishstudy/vot/SpanishStudyRuntimeTelemetry.java \
+            overlay/v219/app/spanishstudy/vot/WorkerLifecyclePolicy.java \
+            overlay/v219/app/spanishstudy/vot/TtsStartPolicy.java \
+            overlay/v224/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            overlay/v221/app/spanishstudy/vot/SubtitleSyncPolicy.java \
+            overlay/v222/app/spanishstudy/vot/SubtitleAudioSyncPolicy.java \
+            overlay/v222/app/spanishstudy/vot/SpeakerCostPolicy.java \
+            overlay/v223/app/spanishstudy/vot/BilingualCardPolicy.java \
+            overlay/v225/app/spanishstudy/vot/SubtitleLinePolicy.java \
+            overlay/v225/app/spanishstudy/vot/SpeakerNamePolicy.java \
+            tests/DubTextSanitizerTest.java tests/OpenRouterOutputGuardTest.java tests/CaptionTrackPreferenceTest.java \
+            tests/OpenRouterBudgetV216Test.java tests/DubLanguageGuardV217Test.java tests/OpenRouterTelemetryV217Test.java \
+            tests/WorkerLifecyclePolicyV219Test.java tests/TtsStartPolicyV219Test.java tests/SubtitlePagePolicyV220Test.java \
+            tests/SubtitleSyncPolicyV221Test.java tests/SubtitleAudioSyncPolicyV222Test.java tests/SpeakerCostPolicyV222Test.java \
+            tests/BilingualCardPolicyV223Test.java tests/SubtitleCardSizeV224Test.java \
+            tests/SubtitleLinePolicyV225Test.java tests/SpeakerNamePolicyV225Test.java
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.CaptionTrackPreferenceTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubLanguageGuardV217Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterTelemetryV217Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.WorkerLifecyclePolicyV219Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.TtsStartPolicyV219Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitlePagePolicyV220Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitleSyncPolicyV221Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitleAudioSyncPolicyV222Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SpeakerCostPolicyV222Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.BilingualCardPolicyV223Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitleCardSizeV224Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitleLinePolicyV225Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SpeakerNamePolicyV225Test
+      - name: Apply and audit integration through v2.25
+        run: |
+          python3 scripts/normalize_v2160_integration.py scripts/patch_v2160_morphe_core.py
+          python3 scripts/normalize_v2190_lifecycle.py scripts/patch_v2190_lifecycle.py
+          python3 scripts/patch_v2160_morphe_core.py upstream overlay/src overlay/v216
+          python3 scripts/patch_v2170_followup.py upstream overlay/v217
+          python3 scripts/patch_v2180_adaptive_recovery.py upstream
+          python3 scripts/patch_v2190_lifecycle.py upstream .
+          python3 scripts/patch_v2190_speaker.py upstream .
+          python3 scripts/patch_speaker_voices.py upstream
+          python3 scripts/audit_v2160_morphe_core.py upstream
+          python3 scripts/audit_v2170_followup.py upstream
+          python3 scripts/audit_v2180_adaptive_recovery.py upstream
+          python3 scripts/audit_v2190_lifecycle_speaker.py upstream
+          python3 scripts/patch_v2200_subtitles.py upstream .
+          python3 scripts/audit_v2200_subtitles.py upstream
+          python3 scripts/patch_v2210_source_subtitle_sync.py upstream .
+          python3 scripts/audit_v2210_source_subtitle_sync.py upstream
+          python3 scripts/patch_v2220_audio_locked_subtitles.py upstream .
+          python3 scripts/audit_v2220_audio_locked_subtitles.py upstream
+          python3 scripts/patch_v2221_speaker_oneshot.py upstream
+          python3 scripts/audit_v2221_speaker_oneshot.py upstream
+          python3 scripts/patch_v2230_bilingual_card_sync.py upstream .
+          python3 scripts/audit_v2230_bilingual_card_sync.py upstream
+          python3 scripts/patch_v2240_larger_cards.py upstream .
+          python3 scripts/audit_v2240_larger_cards.py upstream
+          python3 scripts/patch_v2250_cheap_speaker_style.py upstream .
+          python3 scripts/audit_v2250_cheap_speaker_style.py upstream
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+      - name: Package v2.25.0
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.25.0.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.25.0\nDescription: Retains v2.24 roomier synchronized bilingual cards and v2.22 actual-audio-start timing. Speaker analysis now reuses the existing Morphe OpenRouter key, pins YouTube analysis to Google AI Studio, uses Gemini 3.5 Flash Lite Flex with agentic video understanding as the cheap normal path, and escalates once to Gemini 3.7 Flash only when the cheap speaker map is unusable. OpenRouter response usage provides actual speaker-analysis cost. Optional human-readable speaker names are accepted only when high-confidence exact evidence is verified against supplied captions; acoustic A-H identity remains separate for voice routing. Subtitle presentation is restyled toward common timed-text practice: approximately 42 characters per line, at most two lines per language, punctuation-aware bottom-heavy line breaks, a single dark rounded card, primary white Spanish, secondary English, and bracketed speaker identifiers. Translation batching, translated speech text, Edge synthesis/cache/prefetch, source segmentation and synchronized bilingual page timing remain unchanged.\nVersion: 2.25.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist && sha256sum *.mpp > spanish-dub-study-patches-v2.25.0-SHA256SUMS.txt && cat spanish-dub-study-patches-v2.25.0-SHA256SUMS.txt
+      - name: Upload v2.25.0 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.25.0-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
