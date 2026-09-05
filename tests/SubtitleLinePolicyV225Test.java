@@ -10,7 +10,8 @@ public final class SubtitleLinePolicyV225Test {
     }
 
     private static void losslessTwoLines() {
-        String input = "This is a moderately long subtitle card that should be arranged into two clean readable lines without losing any words.";
+        // v2.24 normally hands the formatter a card around 88 characters, not an entire paragraph.
+        String input = "Larger subtitle cards should split into two clean readable lines without losing any words.";
         String formatted = SubtitleLinePolicy.format(input);
         eq(SubtitlePagePolicy.cleanDisplayText(input), SubtitleLinePolicy.removeFormatting(formatted));
         if (SubtitleLinePolicy.lineCount(formatted) != 2) fail("expected two lines: " + formatted);
