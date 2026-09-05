@@ -20,7 +20,8 @@ public final class SubtitleLinePolicyV225Test {
     }
 
     private static void naturalBreak() {
-        String input = "The first idea is complete, but the second idea should remain easy to scan on screen.";
+        // The punctuation boundary is near the middle, so choosing it does not violate line width.
+        String input = "The first idea is complete and easy to read, but the second idea should also remain clear.";
         String formatted = SubtitleLinePolicy.format(input);
         int breakAt = formatted.indexOf('\n');
         if (breakAt < 0) fail("expected line break");
