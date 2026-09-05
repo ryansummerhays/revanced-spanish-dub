@@ -18,6 +18,10 @@ def main():
             'report.append("Spanish Dub Study v2.24.0 diagnostics\\n");','bump diagnostics')
     rep(ctl,'report.append("subtitleLinePolicy=lossless-pagination-10words-68chars+3-line-safety\\n");',
             'report.append("subtitleLinePolicy=lossless-bilingual-pagination-13words-88chars+3-line-safety\\n");','publish roomier card size')
+    # v2.20 renamed this diagnostics string while changing the request transport. Normalize the
+    # text-only anchor on the v2.25 branch so the following release patch can replace it cleanly.
+    rep(ctl,'report.append("speakerBackend=gemini-3.7-flash-youtube-agentic-audio-sidecar\\n");',
+            'report.append("speakerBackend=gemini-3.7-flash-youtube-audio-sidecar\\n");','normalize v2.25 speaker backend anchor')
     print('v2.24 larger synchronized bilingual cards complete')
 
 if __name__=='__main__': main()
