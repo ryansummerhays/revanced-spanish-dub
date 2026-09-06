@@ -152,7 +152,8 @@ public final class PcmSpeakerFeature {
         if (rms < 0.006) return new Pitch(0, 0);
         int minLag = Math.max(2, sampleRateHz / 350);
         int maxLag = Math.min(x.length / 2, sampleRateHz / 70);
-        double best = 0;
+        double bestCorr = 0;
+        double bestScore = -Double.MAX_VALUE;
         int bestLag = 0;
         for (int lag = minLag; lag <= maxLag; lag += 2) {
             double num = 0, a = 0, b = 0;
@@ -163,13 +164,17 @@ public final class PcmSpeakerFeature {
                 b += q * q;
             }
             double corr = num / Math.sqrt(Math.max(1e-12, a * b));
-            if (corr > best) {
-                best = corr;
+            // Autocorrelation has near-equal peaks at integer multiples of a period. A tiny
+            // lag penalty selects the earliest strong peak instead of a later subharmonic.
+            double score = corr - lag * 0.00008;
+            if (score > bestScore) {
+                bestScore = score;
+                bestCorr = corr;
                 bestLag = lag;
             }
         }
-        if (bestLag == 0 || best < 0.18) return new Pitch(0, Math.max(0, best));
-        return new Pitch(sampleRateHz / (double) bestLag, Math.min(1, best));
+        if (bestLag == 0 || bestCorr < 0.18) return new Pitch(0, Math.max(0, bestCorr));
+        return new Pitch(sampleRateHz / (double) bestLag, Math.min(1, bestCorr));
     }
 
     private static void fft(double[] re, double[] im) {
