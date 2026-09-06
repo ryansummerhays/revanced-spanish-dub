@@ -15,7 +15,7 @@ public final class SubtitlePagePolicy {
     public static final int TARGET_WORDS = 11;
     public static final int TARGET_CHARS = 76;
     public static final int MIN_PAGE_WORDS = 5;
-    public static final int MAX_PAGE_WORDS = 16;
+    public static final int MAX_PAGE_WORDS = 13;
     public static final int HARD_MAX_CHARS = 104;
 
     private static final Set<String> WEAK_END_WORDS = new HashSet<>(List.of(
