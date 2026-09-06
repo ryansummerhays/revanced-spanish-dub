@@ -31,7 +31,7 @@ if 'makeValueRow(context, fg, "Spanish Dub Study")' not in texts[bottom_sheet]:
     raise RuntimeError("clean Spanish Dub Study VOT entry missing")
 if 'clockSource = hasSpanish ? "tts-pending" : "translation-pending";' not in texts[subtitle]:
     raise RuntimeError("pre-TTS subtitle hold missing")
-if "OPENROUTER_MAX_BATCH_CHARS = 1500" not in texts[translator] or "OPENROUTER_FIRST_BATCH_CHARS = 350" not in texts[translator]:
+if "OPENROUTER_MAX_BATCH_CHARS = 1_500" not in texts[translator] or "OPENROUTER_FIRST_BATCH_CHARS = 350" not in texts[translator]:
     raise RuntimeError("Morphe OpenRouter packet invariants changed")
 
 print("v2.32.1 startup-safe audit passed")
