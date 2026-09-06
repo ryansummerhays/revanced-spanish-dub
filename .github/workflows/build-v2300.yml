@@ -1,0 +1,110 @@
+name: Build Spanish Dub Study v2.30.0 runtime stability
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.30.0-runtime-stability
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test retained and v2.30 pure helpers
+        run: |
+          rm -rf /tmp/spanish-study-test && mkdir -p /tmp/spanish-study-test
+          javac -d /tmp/spanish-study-test \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v230/app/spanishstudy/vot/DubLanguageGuard.java \
+            overlay/v224/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            overlay/v223/app/spanishstudy/vot/BilingualCardPolicy.java \
+            overlay/v225/app/spanishstudy/vot/SubtitleLinePolicy.java \
+            tests/DubTextSanitizerTest.java \
+            tests/OpenRouterOutputGuardTest.java \
+            tests/OpenRouterBudgetV216Test.java \
+            tests/DubLanguageGuardV230Test.java \
+            tests/SubtitlePagePolicyV220Test.java \
+            tests/SubtitleCardSizeV224Test.java \
+            tests/BilingualCardPolicyV223Test.java \
+            tests/SubtitleLinePolicyV225Test.java
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.DubLanguageGuardV230Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitlePagePolicyV220Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitleCardSizeV224Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.BilingualCardPolicyV223Test
+          java -cp /tmp/spanish-study-test app.spanishstudy.vot.SubtitleLinePolicyV225Test
+
+      - name: Apply v2.28 diagnostic baseline
+        run: |
+          python3 scripts/patch_v2280_deep_diagnostics_local_diarization.py upstream .
+          python3 scripts/tune_v2280_local_speaker.py upstream
+          python3 scripts/audit_v2280_deep_diagnostics_local_diarization.py upstream
+
+      - name: Apply v2.29 stability fixes
+        run: |
+          python3 scripts/patch_v2290_stability.py upstream .
+          python3 scripts/audit_v2290_stability.py upstream
+
+      - name: Apply v2.30 runtime stability fixes
+        run: |
+          python3 scripts/patch_v2300_runtime_stability.py upstream .
+          python3 scripts/audit_v2300_runtime_stability.py upstream
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Package v2.30.0
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.30.0.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.30.0\nDescription: Runtime stability follow-up to v2.29 on pinned Morphe v1.41.0. Keeps character-aware OpenRouter budgeting and progressive Edge prefetch, restores strict unique-slot/contiguous-prefix OpenRouter parsing, withholds mixed-English streamed lines and repairs guarded final slots through singleton Google fallback, deduplicates an on-demand Edge synthesis when the identical progressive prefetch is already in flight, prevents subtitle page rollback when audio-clock playback hands back to video time, suppresses repeated unsupported Android Visualizer attach attempts, and removes test-voice cache spam from diagnostics. Speech segmentation remains stock Morphe.\nVersion: 2.30.0\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > spanish-dub-study-patches-v2.30.0-SHA256SUMS.txt
+          cat spanish-dub-study-patches-v2.30.0-SHA256SUMS.txt
+
+      - name: Upload v2.30.0 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.30.0-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
