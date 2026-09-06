@@ -16,6 +16,16 @@ def forbid(text: str, token: str, label: str) -> None:
     print("ok absent:", label)
 
 
+def between(text: str, start: str, end: str, label: str) -> str:
+    start_at = text.find(start)
+    if start_at < 0:
+        raise RuntimeError(f"missing {label} start anchor: {start}")
+    end_at = text.find(end, start_at + len(start))
+    if end_at < 0:
+        raise RuntimeError(f"missing {label} end anchor: {end}")
+    return text[start_at:end_at]
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: audit_v2323_pcm_counter_english_source.py <morphe-root>")
@@ -52,14 +62,27 @@ def main() -> None:
     need(hook, "observePcmBufferForStudy(Ljava/nio/ByteBuffer;)V", "one-argument bytecode call")
     need(hook, "invoke-static/range { v$bufferRegister .. v$bufferRegister }", "single-register range invoke")
 
-    # Do not accidentally restore the old invasive v2.32 callback path.
+    callback = between(
+        player_volume,
+        "public static void observePcmBufferForStudy(ByteBuffer buffer)",
+        "/** Read-only diagnostic counter for the Stage-A decoded-PCM hook. */",
+        "Stage-A callback",
+    )
+
+    # Do not accidentally restore the old invasive v2.32 callback path. Scope runtime-operation
+    # checks to the callback itself so unrelated stock PlayerVolumePatch code (e.g. AudioTrackRef.get)
+    # cannot create false positives.
     forbid(hook, "LocalSpeakerDiarizer;->onPcmBuffer", "old direct diarizer hook")
     forbid(hook, "v$sizeRegister", "second size-register injection")
-    forbid(player_volume, ".duplicate()", "PCM buffer duplication")
-    forbid(player_volume, ".get(", "PCM buffer reads")
-    forbid(player_volume, "new Thread", "PCM worker thread")
-    forbid(player_volume, "Executor", "PCM executor")
-    forbid(player_volume, "PcmSpeakerFeature", "feature extraction")
+    forbid(callback, ".duplicate()", "PCM buffer duplication")
+    forbid(callback, "buffer.get", "PCM buffer reads")
+    forbid(callback, "buffer.position", "PCM buffer position access")
+    forbid(callback, "buffer.remaining", "PCM buffer remaining access")
+    forbid(callback, "new ", "PCM callback allocation")
+    forbid(callback, "Thread", "PCM worker thread")
+    forbid(callback, "Executor", "PCM executor")
+    forbid(callback, "PcmSpeakerFeature", "feature extraction")
+    forbid(callback, "SpanishStudyDiagnostics", "audio-thread diagnostic logging")
 
     # Sacred Morphe packetization / segmentation invariants.
     need(translator, "OPENROUTER_MAX_BATCH_CHARS = 1_500", "1500-char batch ceiling unchanged")
