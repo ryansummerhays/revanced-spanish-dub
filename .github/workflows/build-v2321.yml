@@ -1,0 +1,142 @@
+name: Build Spanish Dub Study v2.32.1 startup-safe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.32.1-startup-safe
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test retained core helpers
+        run: |
+          rm -rf /tmp/spanish-study-old && mkdir -p /tmp/spanish-study-old
+          javac -d /tmp/spanish-study-old \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v230/app/spanishstudy/vot/DubLanguageGuard.java \
+            overlay/v224/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            overlay/v223/app/spanishstudy/vot/BilingualCardPolicy.java \
+            overlay/v225/app/spanishstudy/vot/SubtitleLinePolicy.java \
+            tests/DubTextSanitizerTest.java \
+            tests/OpenRouterOutputGuardTest.java \
+            tests/OpenRouterBudgetV216Test.java \
+            tests/DubLanguageGuardV230Test.java \
+            tests/SubtitlePagePolicyV220Test.java \
+            tests/SubtitleCardSizeV224Test.java \
+            tests/BilingualCardPolicyV223Test.java \
+            tests/SubtitleLinePolicyV225Test.java
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.DubLanguageGuardV230Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.SubtitlePagePolicyV220Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.SubtitleCardSizeV224Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.BilingualCardPolicyV223Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.SubtitleLinePolicyV225Test
+
+      - name: Test v2.31 conversational display helpers
+        run: |
+          rm -rf /tmp/spanish-study-v231 && mkdir -p /tmp/spanish-study-v231
+          javac -d /tmp/spanish-study-v231 \
+            overlay/v231/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            overlay/v231/app/spanishstudy/vot/BilingualCardPolicy.java \
+            tests/ConversationalSubtitleV231Test.java
+          java -cp /tmp/spanish-study-v231 app.spanishstudy.vot.ConversationalSubtitleV231Test
+
+      - name: Test retained PCM feature extractor
+        run: |
+          rm -rf /tmp/spanish-study-v232 && mkdir -p /tmp/spanish-study-v232
+          javac -d /tmp/spanish-study-v232 \
+            overlay/v232/app/spanishstudy/vot/PcmSpeakerFeature.java \
+            tests/PcmSpeakerFeatureV232Test.java
+          java -cp /tmp/spanish-study-v232 app.spanishstudy.vot.PcmSpeakerFeatureV232Test
+
+      - name: Apply v2.28 diagnostic baseline
+        run: |
+          python3 scripts/patch_v2280_deep_diagnostics_local_diarization.py upstream .
+          python3 scripts/tune_v2280_local_speaker.py upstream
+          python3 scripts/audit_v2280_deep_diagnostics_local_diarization.py upstream
+
+      - name: Apply v2.29 stability fixes
+        run: |
+          python3 scripts/patch_v2290_stability.py upstream .
+          python3 scripts/audit_v2290_stability.py upstream
+
+      - name: Apply v2.30 runtime stability fixes
+        run: |
+          python3 scripts/patch_v2300_runtime_stability.py upstream .
+          python3 scripts/audit_v2300_runtime_stability.py upstream
+
+      - name: Apply v2.31 conversational subtitle fixes
+        run: |
+          python3 scripts/patch_v2310_conversational_subtitles.py upstream .
+          python3 scripts/audit_v2310_conversational_subtitles.py upstream
+
+      - name: Apply v2.32 UI/subtitle/PCM experiment changes
+        run: |
+          python3 scripts/patch_v2320_direct_pcm_diarization.py upstream .
+          python3 scripts/audit_v2320_direct_pcm_diarization.py upstream
+
+      - name: Apply v2.32.1 startup-safe rollback
+        run: |
+          python3 scripts/patch_v2321_startup_safe.py upstream .
+          python3 scripts/audit_v2321_startup_safe.py upstream
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Package v2.32.1
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.32.1.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.32.1\nDescription: Startup-safe hotfix on pinned Morphe v1.41.0. Keeps v2.32 subtitle pre-TTS hold, clean Spanish Dub Study VOT entry, conversational translation prompt, language guards, TTS prefetch/dedup, and stock Morphe 1500/350 OpenRouter packetization. Removes the new v2.32 direct AudioTrack.write PCM bytecode hook after a user-reported startup crash. Speaker PCM capture is explicitly suspended pending a safer interception point and crash-trace validation.\nVersion: 2.32.1\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > spanish-dub-study-patches-v2.32.1-SHA256SUMS.txt
+          cat spanish-dub-study-patches-v2.32.1-SHA256SUMS.txt
+
+      - name: Upload v2.32.1 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.32.1-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
