@@ -76,8 +76,7 @@ def main() -> None:
         '        report.append("speakerFeatureAssignment=cluster-window-only-no-subtitle-labels-stage-g\\n");\n',
         '        report.append("speakerFeatureAssignment=committed-cluster-live-subtitle-badge-stage-h\\n");\n'
         '        report.append("speakerLabelClock=live-source-pcm-committed-cluster\\n");\n'
-        '        report.append("speakerLabelPersistence=none-live-diagnostic-only\\n");\n'
-        '        report.append("speakerVoiceRouting=disabled-diagnostic-labels-only\\n");\n',
+        '        report.append("speakerLabelPersistence=none-live-diagnostic-only\\n");\n',
         "publish Stage-H label-only behavior",
     )
 
