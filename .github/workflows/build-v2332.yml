@@ -1,0 +1,191 @@
+name: Build Spanish Dub Study v2.33.2 Sherpa Java Packaging Isolation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.33.2-sherpa-java-packaging-isolation
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate patch scripts
+        run: |
+          python3 -m py_compile \
+            scripts/patch_v2323_pcm_counter_english_source.py scripts/audit_v2323_pcm_counter_english_source.py \
+            scripts/patch_v2324_pcm_metadata_stage_b.py scripts/audit_v2324_pcm_metadata_stage_b.py \
+            scripts/patch_v2325_pcm_sample_read_stage_c.py scripts/audit_v2325_pcm_sample_read_stage_c.py \
+            scripts/patch_v2326_audiotrack_format_stage_d.py scripts/audit_v2326_audiotrack_format_stage_d.py \
+            scripts/patch_v2327_pcm16_vad_stage_e.py scripts/audit_v2327_pcm16_vad_stage_e.py \
+            scripts/patch_v2328_speaker_features_stage_f.py scripts/audit_v2328_speaker_features_stage_f.py \
+            scripts/patch_v2329_online_clustering_stage_g.py scripts/audit_v2329_online_clustering_stage_g.py \
+            scripts/patch_v23210_live_cluster_label_stage_h.py scripts/audit_v23210_live_cluster_label_stage_h.py \
+            scripts/patch_v23211_spanish_voice_toggle_stage_i.py scripts/audit_v23211_spanish_voice_toggle_stage_i.py \
+            scripts/patch_v23212_per_video_speaker_reset_stage_j.py scripts/audit_v23212_per_video_speaker_reset_stage_j.py \
+            scripts/patch_v2331_sherpa_startup_isolation.py scripts/audit_v2331_sherpa_startup_isolation.py \
+            scripts/patch_v2332_sherpa_java_packaging_isolation.py scripts/audit_v2332_sherpa_java_packaging_isolation.py
+
+      - name: Replay v2.28 through Stage J
+        run: |
+          set -euo pipefail
+          python3 scripts/patch_v2280_deep_diagnostics_local_diarization.py upstream .
+          python3 scripts/tune_v2280_local_speaker.py upstream
+          python3 scripts/audit_v2280_deep_diagnostics_local_diarization.py upstream
+          python3 scripts/patch_v2290_stability.py upstream .
+          python3 scripts/audit_v2290_stability.py upstream
+          python3 scripts/patch_v2300_runtime_stability.py upstream .
+          python3 scripts/audit_v2300_runtime_stability.py upstream
+          python3 scripts/patch_v2310_conversational_subtitles.py upstream .
+          python3 scripts/audit_v2310_conversational_subtitles.py upstream
+          python3 scripts/patch_v2322_label_only.py upstream
+          python3 scripts/audit_v2322_label_only.py upstream
+          python3 scripts/patch_v2323_pcm_counter_english_source.py upstream
+          python3 scripts/audit_v2323_pcm_counter_english_source.py upstream
+          python3 scripts/patch_v2324_pcm_metadata_stage_b.py upstream
+          python3 scripts/audit_v2324_pcm_metadata_stage_b.py upstream
+          python3 scripts/patch_v2325_pcm_sample_read_stage_c.py upstream
+          python3 scripts/audit_v2325_pcm_sample_read_stage_c.py upstream
+          python3 scripts/patch_v2326_audiotrack_format_stage_d.py upstream
+          python3 scripts/audit_v2326_audiotrack_format_stage_d.py upstream
+          python3 scripts/patch_v2327_pcm16_vad_stage_e.py upstream
+          python3 scripts/audit_v2327_pcm16_vad_stage_e.py upstream
+          python3 scripts/patch_v2328_speaker_features_stage_f.py upstream
+          python3 scripts/audit_v2328_speaker_features_stage_f.py upstream
+          python3 scripts/patch_v2329_online_clustering_stage_g.py upstream
+          python3 scripts/audit_v2329_online_clustering_stage_g.py upstream
+          python3 scripts/patch_v23210_live_cluster_label_stage_h.py upstream
+          python3 scripts/audit_v23210_live_cluster_label_stage_h.py upstream
+          python3 scripts/patch_v23211_spanish_voice_toggle_stage_i.py upstream
+          python3 scripts/audit_v23211_spanish_voice_toggle_stage_i.py upstream
+          python3 scripts/patch_v23212_per_video_speaker_reset_stage_j.py upstream
+          python3 scripts/audit_v23212_per_video_speaker_reset_stage_j.py upstream
+
+      - name: Record startup-hot and sacred Stage-J files
+        run: |
+          sha256sum \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/PlayerVolumePatch.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TranscriptFetcher.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TranscriptTranslator.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TtsPrefetcher.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TtsEngine.java \
+            upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishSubtitleOverlay.java \
+            upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyPrefs.java \
+            upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudySheet.java \
+            upstream/patches/src/main/kotlin/app/morphe/patches/youtube/video/volume/PlayerVolumeHookPatch.kt \
+            > /tmp/v2332-sacred.sha
+
+      - name: Fetch Sherpa runtime, API jar and models
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAR=/tmp/sherpa-onnx-1.13.7.aar
+          curl -L --fail --retry 4 -o "$AAR" \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
+          echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  $AAR" | sha256sum -c -
+
+          rm -rf /tmp/sherpa-aar /tmp/sherpa-seg
+          mkdir -p /tmp/sherpa-aar /tmp/sherpa-seg \
+            upstream/extensions/youtube/libs \
+            upstream/extensions/youtube/src/main/jniLibs/arm64-v8a \
+            upstream/extensions/youtube/src/main/assets/spanishstudy/sherpa
+          unzip -q "$AAR" -d /tmp/sherpa-aar
+          cp /tmp/sherpa-aar/jni/arm64-v8a/*.so upstream/extensions/youtube/src/main/jniLibs/arm64-v8a/
+
+          SEG_ARCHIVE=/tmp/sherpa-pyannote3.tar.bz2
+          curl -L --fail --retry 4 -o "$SEG_ARCHIVE" \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
+          test "$(stat -c%s "$SEG_ARCHIVE")" = "6958444"
+          tar xjf "$SEG_ARCHIVE" -C /tmp/sherpa-seg
+          SEG_MODEL="$(find /tmp/sherpa-seg -type f -name model.onnx | head -n1)"
+          test -n "$SEG_MODEL"
+          cp "$SEG_MODEL" upstream/extensions/youtube/src/main/assets/spanishstudy/sherpa/segmentation.onnx
+
+          EMB=upstream/extensions/youtube/src/main/assets/spanishstudy/sherpa/embedding.onnx
+          curl -L --fail --retry 4 -o "$EMB" \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx
+          test "$(stat -c%s "$EMB")" = "39593761"
+
+          # First reproduce the v2.33.1 state exactly: API jar still absent.
+          test ! -e upstream/extensions/youtube/libs/sherpa-onnx-1.13.7-classes.jar
+
+      - name: Reproduce proven v2.33.1 startup-isolation state
+        run: |
+          python3 scripts/patch_v2331_sherpa_startup_isolation.py upstream
+          python3 scripts/audit_v2331_sherpa_startup_isolation.py upstream
+          sha256sum -c /tmp/v2332-sacred.sha
+
+      - name: Add official Java API jar without runtime linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/sherpa-aar/classes.jar upstream/extensions/youtube/libs/sherpa-onnx-1.13.7-classes.jar
+          jar tf upstream/extensions/youtube/libs/sherpa-onnx-1.13.7-classes.jar | grep 'com/k2fsa/sherpa/onnx/OfflineSpeakerDiarization.class'
+          test -s upstream/extensions/youtube/libs/sherpa-onnx-1.13.7-classes.jar
+
+      - name: Apply and audit v2.33.2 Java-packaging gate
+        run: |
+          python3 scripts/patch_v2332_sherpa_java_packaging_isolation.py upstream
+          python3 scripts/audit_v2332_sherpa_java_packaging_isolation.py upstream
+          sha256sum -c /tmp/v2332-sacred.sha
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Re-audit final source tree
+        run: |
+          python3 scripts/audit_v2332_sherpa_java_packaging_isolation.py upstream
+          sha256sum -c /tmp/v2332-sacred.sha
+
+      - name: Package v2.33.2 Java packaging isolation
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]
+          dst='dist/spanish-dub-study-patches-v2.33.2-sherpa-java-packaging-isolation.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.33.2 Sherpa Java Packaging Isolation\nDescription: Second startup-safety gate after v2.33.1 launched successfully. Keeps the proven ARM64 Sherpa/ONNX native payload and pyannote/ERes2Net models, and adds the official sherpa-onnx 1.13.7 classes.jar plus Kotlin stdlib only. No Sherpa bridge source exists, PlayerVolumePatch and startup-hot runtime files contain no Sherpa reference, System.loadLibrary is absent, and neural PCM feed/inference remain disabled. Stage-J remains runtime authority.\nVersion: 2.33.2-sherpa-java-packaging-isolation\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > spanish-dub-study-patches-v2.33.2-sherpa-java-packaging-isolation-SHA256SUMS.txt
+          cat spanish-dub-study-patches-v2.33.2-sherpa-java-packaging-isolation-SHA256SUMS.txt
+
+      - name: Upload v2.33.2 Java-packaging isolation bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.33.2-sherpa-java-packaging-isolation-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
