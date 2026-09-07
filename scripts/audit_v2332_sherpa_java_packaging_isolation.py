@@ -57,7 +57,7 @@ def main() -> None:
 
     # Make sure the proven Stage-J runtime remains present.
     need(p, "resetSpeakerAnalysisForStudy", "Stage-J reset")
-    need(p, "getSpeakerClusterCommittedLabelForStudy", "Stage-G/H committed cluster access")
+    need(p, "getSpeakerClusterCommittedForStudy", "Stage-G/H committed cluster access")
 
     print("v2.33.2 audit PASS")
     print("PASS: native/model payload present")
