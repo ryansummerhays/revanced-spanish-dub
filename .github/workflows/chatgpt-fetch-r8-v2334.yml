@@ -1,0 +1,33 @@
+name: ChatGPT v2.33.4 tooling fetch
+
+on:
+  push:
+    branches:
+      - chatgpt/v2334-tooling
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-r8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch official R8/D8 8.13.23
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          URL1='https://dl.google.com/dl/android/maven2/com/android/tools/r8/8.13.23/r8-8.13.23.jar'
+          URL2='https://storage.googleapis.com/r8-releases/raw/8.13.23/r8.jar'
+          curl -fL --retry 3 "$URL1" -o out/r8-8.13.23.jar || curl -fL --retry 3 "$URL2" -o out/r8-8.13.23.jar
+          test -s out/r8-8.13.23.jar
+          sha256sum out/r8-8.13.23.jar > out/SHA256SUMS.txt
+          java -cp out/r8-8.13.23.jar com.android.tools.r8.D8 --version
+      - name: Upload R8 tooling
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-8.13.23-v2334-tooling
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
