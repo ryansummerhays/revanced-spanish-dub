@@ -1,0 +1,179 @@
+name: Build Spanish Dub Study v2.32.10 Live Cluster Label Stage-H
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v2.32.10-live-cluster-label-stage-h
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout custom integration
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Morphe patches
+        uses: actions/checkout@v4
+        with:
+          repository: MorpheApp/morphe-patches
+          ref: v1.41.0
+          path: upstream
+          persist-credentials: false
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate v2.32.10 patch scripts
+        run: |
+          python3 -m py_compile \
+            scripts/patch_v2323_pcm_counter_english_source.py \
+            scripts/audit_v2323_pcm_counter_english_source.py \
+            scripts/patch_v2324_pcm_metadata_stage_b.py \
+            scripts/audit_v2324_pcm_metadata_stage_b.py \
+            scripts/patch_v2325_pcm_sample_read_stage_c.py \
+            scripts/audit_v2325_pcm_sample_read_stage_c.py \
+            scripts/patch_v2326_audiotrack_format_stage_d.py \
+            scripts/audit_v2326_audiotrack_format_stage_d.py \
+            scripts/patch_v2327_pcm16_vad_stage_e.py \
+            scripts/audit_v2327_pcm16_vad_stage_e.py \
+            scripts/patch_v2328_speaker_features_stage_f.py \
+            scripts/audit_v2328_speaker_features_stage_f.py \
+            scripts/patch_v2329_online_clustering_stage_g.py \
+            scripts/audit_v2329_online_clustering_stage_g.py \
+            scripts/patch_v23210_live_cluster_label_stage_h.py \
+            scripts/audit_v23210_live_cluster_label_stage_h.py
+
+      - name: Test retained core helpers
+        run: |
+          rm -rf /tmp/spanish-study-old && mkdir -p /tmp/spanish-study-old
+          javac -d /tmp/spanish-study-old \
+            overlay/src/app/spanishstudy/vot/DubTextSanitizer.java \
+            overlay/src/app/spanishstudy/vot/OpenRouterOutputGuard.java \
+            overlay/v216/app/spanishstudy/vot/OpenRouterBudget.java \
+            overlay/v230/app/spanishstudy/vot/DubLanguageGuard.java \
+            overlay/v224/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            overlay/v223/app/spanishstudy/vot/BilingualCardPolicy.java \
+            overlay/v225/app/spanishstudy/vot/SubtitleLinePolicy.java \
+            tests/DubTextSanitizerTest.java \
+            tests/OpenRouterOutputGuardTest.java \
+            tests/OpenRouterBudgetV216Test.java \
+            tests/DubLanguageGuardV230Test.java \
+            tests/SubtitlePagePolicyV220Test.java \
+            tests/SubtitleCardSizeV224Test.java \
+            tests/BilingualCardPolicyV223Test.java \
+            tests/SubtitleLinePolicyV225Test.java
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.DubTextSanitizerTest
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.OpenRouterOutputGuardTest
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.OpenRouterBudgetV216Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.DubLanguageGuardV230Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.SubtitlePagePolicyV220Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.SubtitleCardSizeV224Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.BilingualCardPolicyV223Test
+          java -cp /tmp/spanish-study-old app.spanishstudy.vot.SubtitleLinePolicyV225Test
+
+      - name: Test v2.31 conversational display helpers
+        run: |
+          rm -rf /tmp/spanish-study-v231 && mkdir -p /tmp/spanish-study-v231
+          javac -d /tmp/spanish-study-v231 \
+            overlay/v231/app/spanishstudy/vot/SubtitlePagePolicy.java \
+            overlay/v231/app/spanishstudy/vot/BilingualCardPolicy.java \
+            tests/ConversationalSubtitleV231Test.java
+          java -cp /tmp/spanish-study-v231 app.spanishstudy.vot.ConversationalSubtitleV231Test
+
+      - name: Apply v2.28 diagnostic baseline
+        run: |
+          python3 scripts/patch_v2280_deep_diagnostics_local_diarization.py upstream .
+          python3 scripts/tune_v2280_local_speaker.py upstream
+          python3 scripts/audit_v2280_deep_diagnostics_local_diarization.py upstream
+
+      - name: Apply v2.29 through v2.31 retained fixes
+        run: |
+          python3 scripts/patch_v2290_stability.py upstream .
+          python3 scripts/audit_v2290_stability.py upstream
+          python3 scripts/patch_v2300_runtime_stability.py upstream .
+          python3 scripts/audit_v2300_runtime_stability.py upstream
+          python3 scripts/patch_v2310_conversational_subtitles.py upstream .
+          python3 scripts/audit_v2310_conversational_subtitles.py upstream
+
+      - name: Apply v2.32.2 through v2.32.9 proven stages
+        run: |
+          python3 scripts/patch_v2322_label_only.py upstream
+          python3 scripts/audit_v2322_label_only.py upstream
+          python3 scripts/patch_v2323_pcm_counter_english_source.py upstream
+          python3 scripts/audit_v2323_pcm_counter_english_source.py upstream
+          python3 scripts/patch_v2324_pcm_metadata_stage_b.py upstream
+          python3 scripts/audit_v2324_pcm_metadata_stage_b.py upstream
+          python3 scripts/patch_v2325_pcm_sample_read_stage_c.py upstream
+          python3 scripts/audit_v2325_pcm_sample_read_stage_c.py upstream
+          python3 scripts/patch_v2326_audiotrack_format_stage_d.py upstream
+          python3 scripts/audit_v2326_audiotrack_format_stage_d.py upstream
+          python3 scripts/patch_v2327_pcm16_vad_stage_e.py upstream
+          python3 scripts/audit_v2327_pcm16_vad_stage_e.py upstream
+          python3 scripts/patch_v2328_speaker_features_stage_f.py upstream
+          python3 scripts/audit_v2328_speaker_features_stage_f.py upstream
+          python3 scripts/patch_v2329_online_clustering_stage_g.py upstream
+          python3 scripts/audit_v2329_online_clustering_stage_g.py upstream
+
+      - name: Record sacred files Stage H must not change
+        run: |
+          sha256sum \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/PlayerVolumePatch.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TranscriptFetcher.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TranscriptTranslator.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/VoiceOverTranslationPatch.java \
+            upstream/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/TtsPrefetcher.java \
+            upstream/patches/src/main/kotlin/app/morphe/patches/youtube/video/volume/PlayerVolumeHookPatch.kt \
+            > /tmp/v23210-untouched.sha
+
+      - name: Apply v2.32.10 Stage-H live cluster label
+        run: |
+          python3 scripts/patch_v23210_live_cluster_label_stage_h.py upstream
+          python3 scripts/audit_v23210_live_cluster_label_stage_h.py upstream
+          sha256sum -c /tmp/v23210-untouched.sha
+
+      - name: Build Morphe patch bundle
+        working-directory: upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :patches:buildAndroid --no-daemon
+
+      - name: Re-audit final built source tree
+        run: |
+          python3 scripts/audit_v23210_live_cluster_label_stage_h.py upstream
+          sha256sum -c /tmp/v23210-untouched.sha
+
+      - name: Package v2.32.10
+        run: |
+          mkdir -p dist
+          python3 - <<'PY2'
+          import glob,time,zipfile
+          srcs=glob.glob('upstream/patches/build/libs/*.mpp')
+          if len(srcs)!=1: raise SystemExit(f'Expected one MPP, found {srcs}')
+          src=srcs[0]; dst='dist/spanish-dub-study-patches-v2.32.10-stage-h.mpp'
+          manifest=f'''Manifest-Version: 1.0\nName: Spanish Dub Study Patches v2.32.10 Stage H\nDescription: Proven direct PCM16 capture, Stage-E voice analysis, Stage-F short speaker features, and Stage-G fixed online clustering are frozen byte-for-byte. Stage H only exposes the current stabilized anonymous A/B/C/D cluster through the existing speaker badge and subtitle diagnostics for manual visual validation against the actual person speaking. No persisted segment labels, named speakers, TTS voice routing, worker thread, new PCM reads, clustering changes, Morphe sentence segmentation changes, OpenRouter 1500/350 packetization changes, subtitle pagination/timing changes, or Edge TTS changes.\nVersion: 2.32.10-stage-h\nTimestamp: {int(time.time()*1000)}\nSource: https://github.com/ryansummerhays/revanced-spanish-dub\nAuthor: ryansummerhays\nContact: na\nWebsite: https://github.com/ryansummerhays/revanced-spanish-dub\nLicense: GNU General Public License v3.0, with additional GPL section 7 requirements\nPatcher-Version: 1.10.0\n\n'''.encode()
+          with zipfile.ZipFile(src,'r') as zin, zipfile.ZipFile(dst,'w') as zout:
+              for info in zin.infolist():
+                  zout.writestr(info, manifest if info.filename=='META-INF/MANIFEST.MF' else zin.read(info.filename))
+          PY2
+          cd dist
+          sha256sum *.mpp > spanish-dub-study-patches-v2.32.10-stage-h-SHA256SUMS.txt
+          cat spanish-dub-study-patches-v2.32.10-stage-h-SHA256SUMS.txt
+
+      - name: Upload v2.32.10 Stage-H bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spanish-dub-study-patches-v2.32.10-stage-h-final
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
