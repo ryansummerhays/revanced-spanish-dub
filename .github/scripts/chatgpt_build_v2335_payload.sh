@@ -4,7 +4,6 @@ set -euxo pipefail
 APK=/tmp/sherpa.apk
 NAME='sherpa-onnx-1.13.7-arm64-v8a-speaker-diarization-revai_v1-3dspeaker.apk'
 URLS=(
-  "https://huggingface.co/csukuangfj/sherpa-onnx-apk/resolve/main/speaker-diarization/1.13.7/$NAME"
   "https://huggingface.co/csukuangfj2/sherpa-onnx-apk/resolve/main/speaker-diarization/1.13.7/$NAME"
   "https://hf-mirror.com/csukuangfj2/sherpa-onnx-apk/resolve/main/speaker-diarization/1.13.7/$NAME"
 )
@@ -24,20 +23,31 @@ unzip -q "$APK" -d /tmp/sherpa-apk
 RES='upstream/patches/src/main/resources/spanishstudy/sherpa'
 mkdir -p "$RES"
 
-find /tmp/sherpa-apk -type f \( -name '*.onnx' -o -path '*/lib/arm64-v8a/*.so' \) -print | sort | tee /tmp/PAYLOAD_SOURCE_FILES.txt
-test -s /tmp/PAYLOAD_SOURCE_FILES.txt
-test "$(grep -c '\.onnx$' /tmp/PAYLOAD_SOURCE_FILES.txt)" -ge 2
-test "$(grep -c '\.so$' /tmp/PAYLOAD_SOURCE_FILES.txt)" -ge 1
+PAYLOAD=(
+  '/tmp/sherpa-apk/assets/embedding.onnx'
+  '/tmp/sherpa-apk/assets/segmentation.onnx'
+  '/tmp/sherpa-apk/lib/arm64-v8a/libonnxruntime.so'
+  '/tmp/sherpa-apk/lib/arm64-v8a/libsherpa-onnx-jni.so'
+)
+: > /tmp/PAYLOAD_SOURCE_FILES.txt
+for f in "${PAYLOAD[@]}"; do
+  test -s "$f"
+  echo "$f" >> /tmp/PAYLOAD_SOURCE_FILES.txt
+  cp "$f" "$RES/$(basename "$f")"
+done
 
-while IFS= read -r f; do
-  b="$(basename "$f")"
-  if test -e "$RES/$b"; then echo "duplicate payload basename: $b" >&2; exit 2; fi
-  cp "$f" "$RES/$b"
-done < /tmp/PAYLOAD_SOURCE_FILES.txt
+# Rev's official model repository is gated for raw downloads. Sherpa's own
+# conversion repository documents this public mirror for the same v1 license.
+curl -fL --retry 3 \
+  'https://huggingface.co/openspeech/revai-models/resolve/main/v1/LICENSE' \
+  -o "$RES/REV_MODEL_NON_PRODUCTION_LICENSE.txt"
+curl -fL --retry 3 \
+  'https://raw.githubusercontent.com/alibaba-damo-academy/3D-Speaker/master/LICENSE' \
+  -o "$RES/THREEDSPEAKER_LICENSE.txt" || true
+curl -fL --retry 3 \
+  'https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/LICENSE' \
+  -o "$RES/SHERPA_ONNX_LICENSE.txt" || true
 
-curl -fL --retry 3 'https://huggingface.co/Revai/reverb-diarization-v1/raw/main/LICENSE' -o "$RES/REV_REVERB_DIARIZATION_V1_LICENSE.txt"
-curl -fL --retry 3 'https://raw.githubusercontent.com/alibaba-damo-academy/3D-Speaker/master/LICENSE' -o "$RES/THREEDSPEAKER_LICENSE.txt" || true
-curl -fL --retry 3 'https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/LICENSE' -o "$RES/SHERPA_ONNX_LICENSE.txt" || true
 cat > "$RES/NOTICE.txt" <<'EOF'
 Spanish Dub Study neural diarization payload
 
@@ -46,9 +56,18 @@ Speaker segmentation: Revai/reverb-diarization-v1, converted for sherpa-onnx.
 Licensed by Rev under the Rev Model Non-Production License.
 Speaker embedding: 3D-Speaker ERes2Net 16 kHz model, converted for sherpa-onnx.
 
+Reverb model use in this package is limited to personal, testing, research,
+and evaluation in non-production environments under the bundled Rev license.
+
 This v2.33.5 checkpoint packages these files for startup/injection testing only.
 Neural loading, model construction, PCM feed, inference, and voice routing remain disabled.
 EOF
+
+# Verify that the complete Rev license was actually downloaded, not an error page.
+grep -q 'Rev Model Non-Production License' "$RES/REV_MODEL_NON_PRODUCTION_LICENSE.txt"
+grep -q 'Distribution of Rev Model' "$RES/REV_MODEL_NON_PRODUCTION_LICENSE.txt"
+grep -q 'Non-Production Environment' "$RES/REV_MODEL_NON_PRODUCTION_LICENSE.txt"
+
 (cd "$RES" && sha256sum * | sort) | tee /tmp/PAYLOAD_SHA256SUMS.txt
 du -ah "$RES" | sort -h | tail -30
 
@@ -56,8 +75,11 @@ python3 - <<'PY'
 from pathlib import Path
 res=Path('upstream/patches/src/main/resources/spanishstudy/sherpa')
 names=sorted(p.name for p in res.iterdir() if p.is_file())
-assert any(x.endswith('.onnx') for x in names)
-assert any(x.endswith('.so') for x in names)
+assert names.count('embedding.onnx') == 1
+assert names.count('segmentation.onnx') == 1
+assert names.count('libonnxruntime.so') == 1
+assert names.count('libsherpa-onnx-jni.so') == 1
+assert 'libandroidx.graphics.path.so' not in names
 arr=',\n            '.join('"'+x.replace('\\','\\\\').replace('"','\\"')+'"' for x in names)
 src=f'''package app.morphe.patches.youtube.video.voiceovertranslation
 
@@ -118,8 +140,11 @@ with zipfile.ZipFile(p) as z:
     wanted=[n for n in names if 'SpeakerNeuralPayloadPatch' in n or n.endswith('VoiceOverTranslationPatchKt.class') or n.startswith('spanishstudy/sherpa/')]
     pathlib.Path('dist/DELTA_ENTRIES.txt').write_text('\n'.join(wanted)+'\n')
     assert any('SpeakerNeuralPayloadPatch' in n for n in wanted)
-    assert any(n.endswith('.onnx') for n in wanted)
-    assert any(n.endswith('.so') for n in wanted)
+    assert any(n.endswith('embedding.onnx') for n in wanted)
+    assert any(n.endswith('segmentation.onnx') for n in wanted)
+    assert any(n.endswith('libonnxruntime.so') for n in wanted)
+    assert any(n.endswith('libsherpa-onnx-jni.so') for n in wanted)
+    assert not any(n.endswith('libandroidx.graphics.path.so') for n in wanted)
     for n in wanted:
         d=z.read(n)
         print(hashlib.sha256(d).hexdigest(), len(d), n)
