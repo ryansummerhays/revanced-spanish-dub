@@ -1,4 +1,4 @@
-name: ChatGPT fetch JADX tooling
+name: ChatGPT fetch Android reverse-engineering tooling
 
 on:
   push:
@@ -13,17 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Download JADX
+      - name: Download tools
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p out
           curl -fL --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.5/jadx-1.5.5.zip -o out/jadx-1.5.5.zip
+          curl -fL --retry 3 https://repo1.maven.org/maven2/org/smali/baksmali/2.5.2/baksmali-2.5.2.jar -o out/baksmali-2.5.2.jar
+          curl -fL --retry 3 https://repo1.maven.org/maven2/org/smali/smali/2.5.2/smali-2.5.2.jar -o out/smali-2.5.2.jar
           unzip -t out/jadx-1.5.5.zip >/dev/null
-          sha256sum out/jadx-1.5.5.zip > out/SHA256SUMS.txt
-      - name: Upload JADX
+          java -jar out/baksmali-2.5.2.jar --version
+          java -jar out/smali-2.5.2.jar --version
+          sha256sum out/* > out/SHA256SUMS.txt
+      - name: Upload tools
         uses: actions/upload-artifact@v4
         with:
-          name: jadx-1.5.5-tooling
+          name: android-re-tooling
           path: out/
           retention-days: 1
