@@ -1,0 +1,27 @@
+name: ChatGPT fetch apktool v2339
+
+on:
+  push:
+    branches:
+      - chatgpt/v2334-tooling
+    paths:
+      - .github/workflows/chatgpt-fetch-apktool-v2339.yml
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Apktool 2.12.1
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 -o apktool_2.12.1.jar https://github.com/iBotPeaches/Apktool/releases/download/v2.12.1/apktool_2.12.1.jar
+          echo '66cf4524a4a45a7f56567d08b2c9b6ec237bcdd78cee69fd4a59c8a0243aeafa  apktool_2.12.1.jar' | sha256sum -c -
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: apktool-2.12.1-v2339-tooling
+          path: apktool_2.12.1.jar
+          if-no-files-found: error
