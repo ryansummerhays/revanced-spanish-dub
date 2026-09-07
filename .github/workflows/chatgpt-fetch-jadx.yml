@@ -19,8 +19,8 @@ jobs:
           set -euxo pipefail
           mkdir -p out
           curl -fL --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.5/jadx-1.5.5.zip -o out/jadx-1.5.5.zip
-          curl -fL --retry 3 https://repo1.maven.org/maven2/org/smali/baksmali/2.5.2/baksmali-2.5.2.jar -o out/baksmali-2.5.2.jar
-          curl -fL --retry 3 https://repo1.maven.org/maven2/org/smali/smali/2.5.2/smali-2.5.2.jar -o out/smali-2.5.2.jar
+          curl -fL --retry 3 https://github.com/JesusFreke/smali/releases/download/v2.5.2/baksmali-2.5.2.jar -o out/baksmali-2.5.2.jar
+          curl -fL --retry 3 https://github.com/JesusFreke/smali/releases/download/v2.5.2/smali-2.5.2.jar -o out/smali-2.5.2.jar
           unzip -t out/jadx-1.5.5.zip >/dev/null
           java -jar out/baksmali-2.5.2.jar --version
           java -jar out/smali-2.5.2.jar --version
