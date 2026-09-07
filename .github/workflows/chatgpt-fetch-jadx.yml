@@ -1,0 +1,29 @@
+name: ChatGPT fetch JADX tooling
+
+on:
+  push:
+    branches:
+      - chatgpt/v2334-tooling
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download JADX
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          curl -fL --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.5/jadx-1.5.5.zip -o out/jadx-1.5.5.zip
+          unzip -t out/jadx-1.5.5.zip >/dev/null
+          sha256sum out/jadx-1.5.5.zip > out/SHA256SUMS.txt
+      - name: Upload JADX
+        uses: actions/upload-artifact@v4
+        with:
+          name: jadx-1.5.5-tooling
+          path: out/
+          retention-days: 1
