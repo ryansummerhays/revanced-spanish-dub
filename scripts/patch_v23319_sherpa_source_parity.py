@@ -6,6 +6,7 @@ retains v19's temporary stride-4 containment. It does not activate video-master 
 """
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 
@@ -113,6 +114,14 @@ def main() -> None:
         anchor + '        report.append(SherpaNeuralShadow.diagnostics()).append(\'\\n\');\n',
         "publish source-parity Sherpa diagnostics",
     )
+
+    # The Android 1.13.7 AAR exposes private config fields and an AssetManager constructor. The
+    # original source reconstruction accidentally used a different Java API shape. Normalize only
+    # that API boundary; capture/lifecycle behavior remains unchanged.
+    compat = repo / "scripts/patch_v23319_sherpa_reflection_compat.py"
+    if not compat.is_file():
+        raise RuntimeError(f"missing Sherpa Android compatibility patch: {compat}")
+    subprocess.run([sys.executable, str(compat), str(root)], check=True)
 
     print("v2.33.19 Sherpa source-parity patch complete")
     print("PRESERVED: Stage-J live badge authority, direct PCM hook, model lifetime, READY gate, epoch invalidation")
