@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep the small public Sherpa runtime surface as direct typed calls.
 
-Configuration construction stays reflected for Android-AAR compatibility, but getSampleRate(),
+Configuration construction stays reflected for Android-AAR compatibility, but sampleRate(),
 process(), and segment getters are referenced directly. This prevents R8 from deleting the native
 process bridge or OfflineSpeakerDiarizationSegment class while still avoiding private config fields.
 """
@@ -53,12 +53,12 @@ def main() -> None:
 '''
     new_create = '''            OfflineSpeakerDiarization created =
                     (OfflineSpeakerDiarization) diarizerCtor.newInstance(assets, config);
-            int rate = created.getSampleRate();
+            int rate = created.sampleRate();
             if (rate <= 0) throw new IllegalStateException("invalid-neural-sample-rate-" + rate);
 
             diarizer = created;
 '''
-    rep(path, old_create, new_create, "retain direct getSampleRate bridge")
+    rep(path, old_create, new_create, "retain direct sampleRate bridge")
 
     old_infer = '''            Object local = diarizer;
             Method process = processMethod;
@@ -121,7 +121,7 @@ def main() -> None:
 
     print("v2.33.19 Sherpa direct runtime API retention patch complete")
     print("REFLECTED: config construction and Android AssetManager constructor")
-    print("DIRECT: getSampleRate, process, segment getters so R8 cannot prune JNI result surface")
+    print("DIRECT: sampleRate, process, segment getters so R8 cannot prune JNI result surface")
 
 
 if __name__ == "__main__":
