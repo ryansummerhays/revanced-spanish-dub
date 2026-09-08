@@ -17,8 +17,7 @@ def main() -> None:
     vot = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/VoiceOverTranslationPatch.java"
     controller = base / "SpanishStudyController.java"
     for p in (vot, controller, base / "VideoSessionClock.java", base / "AudioVideoTimeBridge.java", base / "SpeakerTimeline.java"):
-        if not p.is_file():
-            raise RuntimeError(f"missing source: {p}")
+        if not p.is_file(): raise RuntimeError(f"missing source: {p}")
 
     vt = vot.read_text(encoding="utf-8")
     ct = controller.read_text(encoding="utf-8")
@@ -26,7 +25,10 @@ def main() -> None:
     bridge = (base / "AudioVideoTimeBridge.java").read_text(encoding="utf-8")
     timeline = (base / "SpeakerTimeline.java").read_text(encoding="utf-8")
 
-    require(vt, "if (videoId.equals(currentVideoId)) return;", "same-video guard")
+    require(vt, "final boolean sameVideo = videoId.equals(currentVideoId);", "same-video bootstrap branch")
+    require(vt, "if (!sameVideo) {", "new-video-only mutation block")
+    if "if (videoId.equals(currentVideoId)) return;" in vt:
+        raise RuntimeError("caption-starving same-video hard return reintroduced")
     require(vt, "VideoSessionClock.onVideoOpened(videoId);", "new-video clock open")
     require(vt, "PlayerVolumePatch.resetSpeakerAnalysisForStudy();", "Stage-J reset retained")
     if vt.index("VideoSessionClock.onVideoOpened(videoId);") > vt.index("PlayerVolumePatch.resetSpeakerAnalysisForStudy();"):
@@ -45,14 +47,15 @@ def main() -> None:
     require(timeline, "endVideoMs", "absolute speaker end")
     require(timeline, "segmentVideoEpoch != videoEpoch", "old-video rejection")
 
-    # This gate must not activate neural/audio behavior yet.
-    for forbidden in ("SherpaNeuralShadow", "observePcmBufferForStudy", "AudioTrack.write"):
-        if forbidden in clock or forbidden in bridge or forbidden in timeline:
-            raise RuntimeError(f"foundation unexpectedly references hot path: {forbidden}")
+    # Foundation classes must not themselves touch YouTube/player APIs or the hot AudioTrack hook.
+    for src_name, src in (("clock", clock), ("bridge", bridge), ("timeline", timeline)):
+        for forbidden in ("VideoInformation.", "AudioTrack.write", "PlayerVolumePatch"):
+            if forbidden in src:
+                raise RuntimeError(f"{src_name} unexpectedly references hot/player path: {forbidden}")
 
-    print("v2.33.24 video-master foundation audit OK")
-    print("same-video lifecycle preserved; new-id/full-close reset; seek continuity boundary present")
-    print("audio/video bridge and absolute speaker timeline compiled but not wired into hot path")
+    print("PASS v2.33.24 video-master foundation audit")
+    print("same-video bootstrap preserved; new-id/full-close reset; seek continuity boundary present")
+    print("audio/video bridge and absolute speaker timeline compiled but not yet active in PCM path")
 
 
 if __name__ == "__main__":
