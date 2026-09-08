@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the v2.33.26 patch driver for generated v19 source shape.
-
-The generated Stage-E/F/G/J body is intentionally left in source for audit/history, but a volatile
-runtime gate makes it unreachable in practice without Java's compile-time unreachable-code rules.
-The v19 Sherpa diagnostics are one chained StringBuilder expression, so this helper also rewrites
-the initial driver diagnostics patch to match that exact source shape.
-"""
+"""Prepare the v2.33.26 patch driver for generated v19 source shape."""
 from pathlib import Path
 import re
 import sys
@@ -19,51 +13,61 @@ def main() -> None:
     player = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/PlayerVolumePatch.java"
     driver = repo / "scripts/patch_v23326_neural_absolute_timeline.py"
 
+    # Runtime-disable the legacy Stage-E/F/G/J body without making Java reject the source as
+    # compile-time unreachable. This field is intentionally private and never written true.
     pt = player.read_text(encoding="utf-8")
     field_anchor = "    private static final AtomicReference<AudioTrack> lastAudioTrackRef = new AtomicReference<>(null);\n"
     if pt.count(field_anchor) != 1:
         raise RuntimeError("could not locate lastAudioTrackRef field")
-    pt = pt.replace(field_anchor,
-            field_anchor + "    private static volatile boolean studyLegacySpeakerDiarizationEnabled = false;\n", 1)
+    pt = pt.replace(
+        field_anchor,
+        field_anchor + "    private static volatile boolean studyLegacySpeakerDiarizationEnabled = false;\n",
+        1,
+    )
     player.write_text(pt, encoding="utf-8")
     print("prepared: volatile legacy speaker gate")
 
     text = driver.read_text(encoding="utf-8")
-    old = '''        // v2.33.26: Sherpa is the only speaker detector. Legacy Stage-E/F/G/J is retired.
+
+    old_retire = """        // v2.33.26: Sherpa is the only speaker detector. Legacy Stage-E/F/G/J is retired.
         return;
         /* legacy Stage-E/F/G/J retained below for source history but unreachable */
         /*
         if (studyAudioTrackEncoding != STUDY_PCM16_ENCODING
-'''
-    new = '''        // v2.33.26: Sherpa is the only speaker detector. Legacy Stage-E/F/G/J is retired.
+"""
+    new_retire = """        // v2.33.26: Sherpa is the only speaker detector. Legacy Stage-E/F/G/J is retired.
         if (!studyLegacySpeakerDiarizationEnabled) return;
         if (studyAudioTrackEncoding != STUDY_PCM16_ENCODING
-'''
-    if text.count(old) != 1:
+"""
+    if text.count(old_retire) != 1:
         raise RuntimeError("could not locate v2.33.26 retirement injection")
-    text = text.replace(old, new, 1)
+    text = text.replace(old_retire, new_retire, 1)
 
-    pattern = re.compile(
-        r'''    # Close the comment just before the method's final catch\..*?'''
-        r'''    rep\(player, legacy_end, legacy_end_new, "close retired legacy PCM diarization source block"\)\n''',
-        re.S,
-    )
-    text, n = pattern.subn("", text, count=1)
-    if n != 1:
-        raise RuntimeError("could not remove obsolete block-comment close patch")
+    # Remove the now-obsolete block-comment closing patch from the checked-in driver.
+    block_start = text.find("    # Close the comment just before the method's final catch.")
+    block_end_marker = '    rep(player, legacy_end, legacy_end_new, "close retired legacy PCM diarization source block")\n'
+    if block_start < 0:
+        raise RuntimeError("could not locate obsolete block-comment patch start")
+    block_end = text.find(block_end_marker, block_start)
+    if block_end < 0:
+        raise RuntimeError("could not locate obsolete block-comment patch end")
+    block_end += len(block_end_marker)
+    text = text[:block_start] + text[block_end:]
 
-    # The checked-in v19 Sherpa source emits diagnostics as one chained StringBuilder expression,
-    # not separate out.append() statements. Replace the driver's original diagnostic patch block
-    # with exact chained-expression anchors.
-    diag_pattern = re.compile(
-        r'''    diag_anchor = '''.*?'''
-    rep\(sherpa, diag_anchor, diag_insert, "publish neural absolute timeline diagnostics"\)\n''',
-        re.S,
-    )
-    diag_replacement = '''    diag_anchor = ''' + "'''" + '''                .append("\\nspeakerNeuralInferenceLastError=").append(inferenceError)
+    # The v19 Sherpa diagnostics are one chained StringBuilder expression. Replace the driver's
+    # separate out.append() patch with an exact chained-expression patch.
+    diag_start = text.find("    diag_anchor = '''")
+    diag_end_marker = '    rep(sherpa, diag_anchor, diag_insert, "publish neural absolute timeline diagnostics")\n'
+    if diag_start < 0:
+        raise RuntimeError("could not locate diagnostic patch start")
+    diag_end = text.find(diag_end_marker, diag_start)
+    if diag_end < 0:
+        raise RuntimeError("could not locate diagnostic patch end")
+    diag_end += len(diag_end_marker)
+    diag_replacement = """    diag_anchor = '''                .append("\\nspeakerNeuralInferenceLastError=").append(inferenceError)
                 .append("\\nspeakerNeuralLiveBadgeAuthority=false-stage-j-remains-control")
-'''+ "'''" + '''
-    diag_insert = ''' + "'''" + '''                .append("\\nspeakerNeuralInferenceLastError=").append(inferenceError)
+'''
+    diag_insert = '''                .append("\\nspeakerNeuralInferenceLastError=").append(inferenceError)
                 .append("\\nspeakerNeuralCaptureVideoEpoch=").append(captureVideoEpoch)
                 .append("\\nspeakerNeuralCaptureContinuityEpoch=").append(captureContinuityEpoch)
                 .append("\\nspeakerNeuralCaptureStartVideoMs=").append(captureStartVideoMs)
@@ -74,28 +78,27 @@ def main() -> None:
                 .append("\\nspeakerNeuralAbsoluteSegments=").append(absoluteSegmentCount)
                 .append("\\nspeakerNeuralAbsoluteSummary=").append(absoluteTimelineSummary)
                 .append("\\nspeakerNeuralLiveBadgeAuthority=true-neural-projected-video-timeline")
-'''+ "'''" + '''
+'''
     rep(sherpa, diag_anchor, diag_insert, "publish neural absolute timeline diagnostics")
-'''
-    text, n = diag_pattern.subn(diag_replacement, text, count=1)
-    if n != 1:
-        raise RuntimeError("could not rewrite chained Sherpa diagnostic patch")
+"""
+    text = text[:diag_start] + diag_replacement + text[diag_end:]
 
-    # The same chained expression starts with a literal gate string, so make the gate replacement
-    # accept the actual source rather than a separate out.append() statement.
-    old_gate_patch = '''    rep(sherpa,
-        '        out.append("speakerNeuralGate=v2.33.19-source-parity+stride4-only\\n");\\n',
-        '        out.append("speakerNeuralGate=v2.33.26-neural-only+stride4+absolute-video-projection\\n");\\n',
-        "update neural gate diagnostic")
-'''
-    new_gate_patch = '''    rep(sherpa,
+    gate_start_marker = "    # The v19 gate string should no longer imply Stage-J is the intended next authority.\n"
+    gate_start = text.find(gate_start_marker)
+    gate_end_marker = '        "update neural gate diagnostic")\n'
+    if gate_start < 0:
+        raise RuntimeError("could not locate gate patch start")
+    gate_end = text.find(gate_end_marker, gate_start)
+    if gate_end < 0:
+        raise RuntimeError("could not locate gate patch end")
+    gate_end += len(gate_end_marker)
+    gate_replacement = """    # The v19 diagnostics are a chained StringBuilder expression.
+    rep(sherpa,
         '.append("\\\\nspeakerNeuralGate=v2.33.19-source-parity+stride4-only")',
         '.append("\\\\nspeakerNeuralGate=v2.33.26-neural-only+stride4+absolute-video-projection")',
         "update neural gate diagnostic")
-'''
-    if text.count(old_gate_patch) != 1:
-        raise RuntimeError("could not locate old neural gate patch")
-    text = text.replace(old_gate_patch, new_gate_patch, 1)
+"""
+    text = text[:gate_start] + gate_replacement + text[gate_end:]
 
     driver.write_text(text, encoding="utf-8")
     print("prepared: compile-safe v2.33.26 patch driver")
