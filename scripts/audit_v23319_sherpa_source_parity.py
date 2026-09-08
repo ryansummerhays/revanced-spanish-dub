@@ -41,8 +41,11 @@ def main() -> None:
     require(shadow, 'openRawResource', "res/raw transport")
 
     # Private/config API stays reflected because the Android AAR differs from generic java-api.
-    require(shadow, 'getConstructor(assetManagerClass, cfgCls)', "Android AAR AssetManager constructor")
+    require(shadow, 'Constructor<?> diarizerCtor = diarizerCls.getConstructor(cfgCls);', "Android AAR file-backed constructor")
+    require(shadow, 'diarizerCtor.newInstance(config)', "file-backed Sherpa model creation")
     require(shadow, 'Class.forName("com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationConfig")', "reflected config API")
+    forbid(shadow, 'getConstructor(assetManagerClass, cfgCls)', "AssetManager constructor with absolute model paths")
+    forbid(shadow, 'diarizerCtor.newInstance(assets, config)', "AssetManager invocation with absolute model paths")
 
     # Public runtime API stays directly typed so R8 cannot prune native process/result methods.
     require(shadow, 'import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarization;', "typed diarizer runtime API")
@@ -62,6 +65,7 @@ def main() -> None:
 
     print("PASS v2.33.19 source-parity audit")
     print("READY gate, epoch invalidation, bounded capture, stride-4 containment and Sherpa JNI result surface preserved")
+    print("PASS absolute-path model constructor: file-backed config constructor, no AssetManager invocation")
 
 
 if __name__ == "__main__":
