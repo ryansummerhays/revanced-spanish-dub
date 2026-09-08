@@ -4,6 +4,9 @@
 Configuration construction stays reflected for Android-AAR compatibility, but sampleRate(),
 process(), and segment getters are referenced directly. This prevents R8 from deleting the native
 process bridge or OfflineSpeakerDiarizationSegment class while still avoiding private config fields.
+
+Models are file-backed absolute paths, so creation must use OfflineSpeakerDiarization(config), not
+the AssetManager constructor.
 """
 from pathlib import Path
 import sys
@@ -42,7 +45,7 @@ def main() -> None:
         "retain typed diarizer",
     )
 
-    old_create = '''            Object created = diarizerCtor.newInstance(assets, config);
+    old_create = '''            Object created = diarizerCtor.newInstance(config);
             Method getSampleRate = diarizerCls.getMethod("getSampleRate");
             Method process = diarizerCls.getMethod("process", float[].class);
             int rate = ((Number) getSampleRate.invoke(created)).intValue();
@@ -52,13 +55,13 @@ def main() -> None:
             processMethod = process;
 '''
     new_create = '''            OfflineSpeakerDiarization created =
-                    (OfflineSpeakerDiarization) diarizerCtor.newInstance(assets, config);
+                    (OfflineSpeakerDiarization) diarizerCtor.newInstance(config);
             int rate = created.sampleRate();
             if (rate <= 0) throw new IllegalStateException("invalid-neural-sample-rate-" + rate);
 
             diarizer = created;
 '''
-    rep(path, old_create, new_create, "retain direct sampleRate bridge")
+    rep(path, old_create, new_create, "retain direct sampleRate bridge with file-backed constructor")
 
     old_infer = '''            Object local = diarizer;
             Method process = processMethod;
@@ -120,7 +123,7 @@ def main() -> None:
     rep(path, old_infer, new_infer, "retain direct process and segment getters")
 
     print("v2.33.19 Sherpa direct runtime API retention patch complete")
-    print("REFLECTED: config construction and Android AssetManager constructor")
+    print("REFLECTED: config construction and Android file-backed config constructor")
     print("DIRECT: sampleRate, process, segment getters so R8 cannot prune JNI result surface")
 
 
