@@ -41,6 +41,7 @@ jobs:
             scripts/audit_v23312_caption_bootstrap_source.py \
             scripts/patch_v23324_video_master_clock_foundation.py \
             scripts/audit_v23324_video_master_clock_foundation.py \
+            scripts/prepare_v23326_driver.py \
             scripts/patch_v23326_neural_absolute_timeline.py \
             scripts/audit_v23326_neural_absolute_timeline.py
 
@@ -120,6 +121,7 @@ jobs:
 
       - name: Apply neural absolute timeline and render-clock probe
         run: |
+          python3 scripts/prepare_v23326_driver.py upstream .
           python3 scripts/patch_v23326_neural_absolute_timeline.py upstream .
           python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
 
