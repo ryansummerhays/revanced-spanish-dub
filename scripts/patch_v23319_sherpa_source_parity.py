@@ -113,16 +113,23 @@ def main() -> None:
 
     # Keep only the tiny public runtime surface typed. Pure reflection let R8 prove process() and
     # OfflineSpeakerDiarizationSegment unreachable and remove them from the DEX. Direct calls to
-    # getSampleRate/process/getters preserve the JNI/result bridge without touching private configs.
+    # sampleRate/process/getters preserve their Java reachability without touching private configs.
     runtime_api = repo / "scripts/patch_v23319_sherpa_direct_runtime_api.py"
     if not runtime_api.is_file():
         raise RuntimeError(f"missing Sherpa runtime retention patch: {runtime_api}")
     subprocess.run([sys.executable, str(runtime_api), str(root)], check=True)
 
+    # Sherpa JNI itself performs name-based field/class/constructor lookups that R8 cannot see.
+    # Explicit keep rules preserve that ABI exactly, including config fields and Segment (FFI)V.
+    keep_rules = repo / "scripts/patch_v23319_sherpa_jni_keep_rules.py"
+    if not keep_rules.is_file():
+        raise RuntimeError(f"missing Sherpa JNI keep-rule patch: {keep_rules}")
+    subprocess.run([sys.executable, str(keep_rules), str(root)], check=True)
+
     print("v2.33.19 Sherpa source-parity patch complete")
     print("PRESERVED: Stage-J live badge authority, direct PCM hook, model lifetime, READY gate, epoch invalidation")
     print("PRESERVED: bounded 320000-sample capture and temporary stride-4 containment")
-    print("PRESERVED THROUGH R8: Sherpa getSampleRate/process/segment JNI result surface")
+    print("PRESERVED THROUGH R8: Sherpa JNI class/config/segment names + sampleRate/process result surface")
     print("NOT ACTIVE YET: video-master PCM admission, speaker voice routing")
 
 
