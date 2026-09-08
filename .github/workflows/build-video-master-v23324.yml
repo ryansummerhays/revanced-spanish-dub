@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.26 Neural Absolute Timeline
+name: Build Spanish Dub v2.33.27 Accepted Write PCM Clock
 
 on:
   workflow_dispatch:
@@ -43,7 +43,9 @@ jobs:
             scripts/audit_v23324_video_master_clock_foundation.py \
             scripts/prepare_v23326_driver.py \
             scripts/patch_v23326_neural_absolute_timeline.py \
-            scripts/audit_v23326_neural_absolute_timeline.py
+            scripts/audit_v23326_neural_absolute_timeline.py \
+            scripts/patch_v23327_accepted_write_accounting.py \
+            scripts/audit_v23327_accepted_write_accounting.py
 
       - name: Test master-clock helpers without Android
         run: |
@@ -119,11 +121,16 @@ jobs:
           python3 scripts/patch_v23324_video_master_clock_foundation.py upstream .
           python3 scripts/audit_v23324_video_master_clock_foundation.py upstream
 
-      - name: Apply neural absolute timeline and render-clock probe
+      - name: Apply v2.33.26 neural absolute timeline and render-clock probe
         run: |
           python3 scripts/prepare_v23326_driver.py upstream .
           python3 scripts/patch_v23326_neural_absolute_timeline.py upstream .
           python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
+
+      - name: Apply v2.33.27 accepted AudioTrack write accounting
+        run: |
+          python3 scripts/patch_v23327_accepted_write_accounting.py upstream .
+          python3 scripts/audit_v23327_accepted_write_accounting.py upstream
 
       - name: Build source-compiled Morphe extension candidate
         working-directory: upstream
@@ -136,7 +143,7 @@ jobs:
       - name: Re-audit final source tree
         run: |
           python3 scripts/audit_v23312_caption_bootstrap_source.py upstream
-          python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
+          python3 scripts/audit_v23327_accepted_write_accounting.py upstream
 
       - name: Extract source-built extension and package candidate
         shell: bash
@@ -145,14 +152,17 @@ jobs:
           mkdir -p dist
           MPP="$(find upstream/patches/build/libs -maxdepth 1 -type f -name '*.mpp' | head -n1)"
           test -n "$MPP"
-          unzip -p "$MPP" extensions/youtube.mpe > dist/youtube-v23326-source-compiled.mpe
-          test -s dist/youtube-v23326-source-compiled.mpe
-          strings dist/youtube-v23326-source-compiled.mpe | grep 'SherpaNeuralShadow'
-          strings dist/youtube-v23326-source-compiled.mpe | grep 'videoMasterClock=video-ms-authority'
-          strings dist/youtube-v23326-source-compiled.mpe | grep 'v2.33.26-neural-only+stride4+absolute-video-projection'
-          strings dist/youtube-v23326-source-compiled.mpe | grep 'audioVideoSyncProbe=controller-sampled-audiotrack-render-clock'
-          strings dist/youtube-v23326-source-compiled.mpe | grep 'speakerNeuralAbsoluteTimelineMode=linear-projection-from-video-clock-capture-span-coarse'
-          cp "$MPP" dist/spanish-dub-v23326-source-build-NOT-INSTALL.mpp
+          unzip -p "$MPP" extensions/youtube.mpe > dist/youtube-v23327-source-compiled.mpe
+          test -s dist/youtube-v23327-source-compiled.mpe
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'SherpaNeuralShadow'
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'videoMasterClock=video-ms-authority'
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'v2.33.26-neural-only+stride4+absolute-video-projection'
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'Spanish Dub Study v2.33.27 accepted-write PCM clock diagnostics'
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'pcmWriteAccounting=post-audiotrack-write-return-value-diagnostic-only'
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'audioVideoSyncAcceptedVsRenderedMs='
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'audioVideoSyncAcceptedVsVideoMs='
+          strings dist/youtube-v23327-source-compiled.mpe | grep 'pcmAdmission=unchanged-sherpa-stride4-v23327-diagnostic-only'
+          cp "$MPP" dist/spanish-dub-v23327-source-build-NOT-INSTALL.mpp
           sha256sum dist/* > dist/SHA256SUMS.txt
           ls -lh dist/
           cat dist/SHA256SUMS.txt
@@ -160,7 +170,7 @@ jobs:
       - name: Upload source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23326-source-candidate
+          name: spanish-dub-v23327-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
