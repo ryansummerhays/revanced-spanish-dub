@@ -38,7 +38,6 @@ def main() -> None:
     ht = helper.read_text(encoding="utf-8")
     vt = vot.read_text(encoding="utf-8")
 
-    # Render-clock probe is controller driven and cannot invoke YouTube/player APIs or AudioTrack writes.
     require(ht, "getPlaybackHeadPosition()", "AudioTrack playback-head sampling")
     require(ht, "getTimestamp(timestamp)", "AudioTimestamp sampling")
     require(ht, "clockAnchor videoMs=", "optional runtime anchor trace")
@@ -49,7 +48,6 @@ def main() -> None:
 
     require(pt, "getActiveAudioTrackForStudy()", "read-only active AudioTrack accessor")
     require(pt, "SherpaNeuralShadow.observePcmBuffer(", "Sherpa PCM feed retained")
-    require(pt, "legacy Stage-E/F/G/J", "legacy diarizer retired marker")
     require(pt, "if (!studyLegacySpeakerDiarizationEnabled) return;", "legacy diarizer runtime-off gate")
 
     require(ct, "VideoSessionClock.publishVideoTime(timeMs);", "video master publication")
@@ -72,7 +70,6 @@ def main() -> None:
     require(sht, '"Neural speaker timeline"', "neural timeline log option")
     forbid(sht, "LocalSpeakerDiarizer.setEnabled(activity, value)", "legacy Visualizer toggle")
 
-    # Sherpa remains bounded/safe while gaining video ownership and absolute projection.
     require(nt, "CAPTURE_TARGET_SAMPLES = TARGET_SAMPLE_RATE * CAPTURE_SECONDS", "bounded neural capture")
     require(nt, "if ((((int) captureBuffers) & 3) != 0) return;", "temporary stride-4 containment")
     require(nt, "captureVideoEpoch", "capture video ownership")
@@ -91,7 +88,6 @@ def main() -> None:
     forbid(nt, "getVideoTime(", "direct player-time call in neural worker")
     forbid(nt, "interrupt()", "native inference interruption")
 
-    # Caption bootstrap/reset semantics from v12/v24 must still be preserved.
     require(vt, "final boolean sameVideo = videoId.equals(currentVideoId);", "same-video bootstrap branch")
     forbid(vt, "if (videoId.equals(currentVideoId)) return;", "caption-starving same-video return")
     require(vt, "VideoSessionClock.onVideoOpened(videoId);", "new-video epoch open")
