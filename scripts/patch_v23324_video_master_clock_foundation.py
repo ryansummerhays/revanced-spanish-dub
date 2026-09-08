@@ -7,7 +7,7 @@ subtitles, or TTS scheduling. The adaptive AudioVideoTimeBridge and SpeakerTimel
 compiled into the extension but remain inert until a later gate.
 
 Reset semantics:
-- same video lifecycle callback: keep state
+- same video lifecycle callback: keep state and may retry transcript bootstrap
 - pause/minimize/PiP/maximize: keep state
 - explicit seek or large clock jump: new continuity epoch, same video epoch
 - different video id: new video epoch
@@ -46,7 +46,7 @@ def main() -> None:
     vot = root / "extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/voiceovertranslation/VoiceOverTranslationPatch.java"
     controller = target / "SpanishStudyController.java"
     if not vot.is_file() or not controller.is_file():
-        raise RuntimeError("missing Stage-J VOT/controller source")
+        raise RuntimeError("missing source-parity VOT/controller source")
 
     rep(
         vot,
@@ -56,15 +56,17 @@ def main() -> None:
         "import video master clock",
     )
 
-    # Stage J already leaves this guard before its per-video speaker reset. Keep it sacred: a
-    # duplicate callback for the same open video must not create a new video epoch.
+    # v2.33.12 replaced the old same-video hard return with a new-video-only mutation block.
+    # Open a master-clock session only inside that block; same-video bootstrap retries keep state.
     rep(
         vot,
-        "        if (videoId.equals(currentVideoId)) return;\n\n"
-        "        PlayerVolumePatch.resetSpeakerAnalysisForStudy();\n",
-        "        if (videoId.equals(currentVideoId)) return;\n\n"
-        "        VideoSessionClock.onVideoOpened(videoId);\n"
-        "        PlayerVolumePatch.resetSpeakerAnalysisForStudy();\n",
+        "        final boolean sameVideo = videoId.equals(currentVideoId);\n"
+        "        if (!sameVideo) {\n"
+        "            PlayerVolumePatch.resetSpeakerAnalysisForStudy();\n",
+        "        final boolean sameVideo = videoId.equals(currentVideoId);\n"
+        "        if (!sameVideo) {\n"
+        "            VideoSessionClock.onVideoOpened(videoId);\n"
+        "            PlayerVolumePatch.resetSpeakerAnalysisForStudy();\n",
         "open clock session only for genuinely new video",
     )
 
