@@ -5,8 +5,9 @@ Configuration construction stays reflected for Android-AAR compatibility, but sa
 process(), and segment getters are referenced directly. This prevents R8 from deleting the native
 process bridge or OfflineSpeakerDiarizationSegment class while still avoiding private config fields.
 
-Models are file-backed absolute paths, so creation must use OfflineSpeakerDiarization(config), not
-the AssetManager constructor.
+Models are file-backed absolute paths. Android Sherpa's Kotlin JVM constructor is
+(AssetManager?, Config), so the reflected invocation must pass null for AssetManager to select
+newFromFile rather than newFromAsset.
 """
 from pathlib import Path
 import sys
@@ -45,7 +46,7 @@ def main() -> None:
         "retain typed diarizer",
     )
 
-    old_create = '''            Object created = diarizerCtor.newInstance(config);
+    old_create = '''            Object created = diarizerCtor.newInstance(null, config);
             Method getSampleRate = diarizerCls.getMethod("getSampleRate");
             Method process = diarizerCls.getMethod("process", float[].class);
             int rate = ((Number) getSampleRate.invoke(created)).intValue();
@@ -55,13 +56,13 @@ def main() -> None:
             processMethod = process;
 '''
     new_create = '''            OfflineSpeakerDiarization created =
-                    (OfflineSpeakerDiarization) diarizerCtor.newInstance(config);
+                    (OfflineSpeakerDiarization) diarizerCtor.newInstance(null, config);
             int rate = created.sampleRate();
             if (rate <= 0) throw new IllegalStateException("invalid-neural-sample-rate-" + rate);
 
             diarizer = created;
 '''
-    rep(path, old_create, new_create, "retain direct sampleRate bridge with file-backed constructor")
+    rep(path, old_create, new_create, "retain direct sampleRate bridge with null-AssetManager file mode")
 
     old_infer = '''            Object local = diarizer;
             Method process = processMethod;
@@ -123,7 +124,8 @@ def main() -> None:
     rep(path, old_infer, new_infer, "retain direct process and segment getters")
 
     print("v2.33.19 Sherpa direct runtime API retention patch complete")
-    print("REFLECTED: config construction and Android file-backed config constructor")
+    print("REFLECTED: config construction and Android nullable-AssetManager constructor")
+    print("FILE MODE: null AssetManager selects newFromFile for absolute model paths")
     print("DIRECT: sampleRate, process, segment getters so R8 cannot prune JNI result surface")
 
 
