@@ -108,7 +108,10 @@ def main() -> None:
 '''
     rep(player, callback_anchor, callback_insert, "add pre/post AudioTrack.write result accounting")
 
-    getter_anchor = "    public static int getAudioTrackPlayStateForStudy() { return studyAudioTrackPlayState; }\n\n"
+    getter_anchor = (
+        "    public static int getAudioTrackPlayStateForStudy() { return studyAudioTrackPlayState; }\n"
+        "    public static int getPcmAnalysisMaxFramesForStudy() { return STUDY_PCM_ANALYSIS_MAX_FRAMES; }\n"
+    )
     getter_insert = '''    public static int getAudioTrackPlayStateForStudy() { return studyAudioTrackPlayState; }
     public static long getPcmWriteAttemptsForStudy() { return studyPcmWriteAttempts; }
     public static long getPcmWriteSuccessfulForStudy() { return studyPcmWriteSuccessful; }
@@ -119,7 +122,7 @@ def main() -> None:
     public static long getPcmWriteAcceptedBytesForStudy() { return studyPcmWriteAcceptedBytes; }
     public static long getPcmWriteAcceptedFramesForStudy() { return studyPcmWriteAcceptedFrames; }
     public static int getPcmWritePendingRequestedBytesForStudy() { return studyPcmWritePendingRequestedBytes; }
-
+    public static int getPcmAnalysisMaxFramesForStudy() { return STUDY_PCM_ANALYSIS_MAX_FRAMES; }
 '''
     rep(player, getter_anchor, getter_insert, "publish accepted-write accounting getters")
 
