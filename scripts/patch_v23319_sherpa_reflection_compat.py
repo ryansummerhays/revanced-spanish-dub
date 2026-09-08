@@ -5,6 +5,10 @@ The proven runtime used the Android API shape, while the first source reconstruc
 compiled against direct config fields from a different Java API shape. Keep all capture/lifecycle
 logic unchanged and switch only model construction + result access to reflection. This also keeps
 Sherpa implementation details off the AudioTrack path.
+
+Important: the neural models are extracted to absolute filesystem paths. Sherpa's Android JNI
+requires the file-backed OfflineSpeakerDiarization(config) constructor for those paths. Passing an
+AssetManager together with absolute paths causes Sherpa to terminate the process.
 """
 from pathlib import Path
 import sys
@@ -90,8 +94,9 @@ def main() -> None:
             diarizer = created;
 '''
     new_model = '''            // Android sherpa-onnx 1.13.7 has a different public Java surface from the generic
-            // java-api source tree. Use the same constructor signatures as the proven Android
-            // runtime so private config fields never become a source-compatibility dependency.
+            // java-api source tree. Use the Android constructor signatures without depending on
+            // private config fields. Models are extracted to normal files, so use the file-backed
+            // one-argument constructor. AssetManager + absolute paths is invalid in Sherpa JNI.
             Class<?> pyCls = Class.forName(
                     "com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig");
             Object pyannote = pyCls.getConstructor(String.class, Float.TYPE)
@@ -120,10 +125,8 @@ def main() -> None:
 
             extractionStep = "model-create";
             Class<?> diarizerCls = Class.forName("com.k2fsa.sherpa.onnx.OfflineSpeakerDiarization");
-            Class<?> assetManagerClass = Class.forName("android.content.res.AssetManager");
-            Object assets = contextClass.getMethod("getAssets").invoke(context);
-            Constructor<?> diarizerCtor = diarizerCls.getConstructor(assetManagerClass, cfgCls);
-            Object created = diarizerCtor.newInstance(assets, config);
+            Constructor<?> diarizerCtor = diarizerCls.getConstructor(cfgCls);
+            Object created = diarizerCtor.newInstance(config);
             Method getSampleRate = diarizerCls.getMethod("getSampleRate");
             Method process = diarizerCls.getMethod("process", float[].class);
             int rate = ((Number) getSampleRate.invoke(created)).intValue();
@@ -132,7 +135,7 @@ def main() -> None:
             diarizer = created;
             processMethod = process;
 '''
-    rep(path, old_model, new_model, "use Android-AAR reflection for model creation")
+    rep(path, old_model, new_model, "use Android-AAR file-backed reflection for model creation")
 
     old_infer = '''            OfflineSpeakerDiarization local = diarizer;
             if (local == null || state != STATE_READY) {
@@ -192,6 +195,7 @@ def main() -> None:
 
     print("v2.33.19 Android-AAR reflection compatibility patch complete")
     print("UNCHANGED: capture stride, sample target, worker lifecycle, state gate, epoch invalidation")
+    print("FIXED: absolute model paths now use OfflineSpeakerDiarization(config), not AssetManager constructor")
 
 
 if __name__ == "__main__":
