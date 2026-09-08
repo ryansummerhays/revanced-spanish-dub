@@ -44,6 +44,8 @@ jobs:
             scripts/prepare_v23326_driver.py \
             scripts/patch_v23326_neural_absolute_timeline.py \
             scripts/audit_v23326_neural_absolute_timeline.py \
+            scripts/patch_v23327_neural_payload_source.py \
+            scripts/audit_v23327_neural_payload_source.py \
             scripts/patch_v23327_accepted_write_accounting.py \
             scripts/audit_v23327_accepted_write_accounting.py
 
@@ -127,6 +129,11 @@ jobs:
           python3 scripts/patch_v23326_neural_absolute_timeline.py upstream .
           python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
 
+      - name: Restore installable Sherpa payload dependency in source
+        run: |
+          python3 scripts/patch_v23327_neural_payload_source.py upstream
+          python3 scripts/audit_v23327_neural_payload_source.py upstream
+
       - name: Apply v2.33.27 accepted AudioTrack write accounting
         shell: bash
         run: |
@@ -164,6 +171,7 @@ jobs:
       - name: Re-audit final source tree
         run: |
           python3 scripts/audit_v23312_caption_bootstrap_source.py upstream
+          python3 scripts/audit_v23327_neural_payload_source.py upstream
           python3 scripts/audit_v23327_accepted_write_accounting.py upstream
 
       - name: Extract source-built extension and package candidate
@@ -183,6 +191,13 @@ jobs:
           strings dist/youtube-v23327-source-compiled.mpe | grep 'audioVideoSyncAcceptedVsRenderedMs='
           strings dist/youtube-v23327-source-compiled.mpe | grep 'audioVideoSyncAcceptedVsVideoMs='
           strings dist/youtube-v23327-source-compiled.mpe | grep 'pcmAdmission=unchanged-sherpa-stride4-v23327-diagnostic-only'
+          unzip -p "$MPP" classes.dex > dist/patches-v23327-classes.dex
+          strings -n 3 dist/patches-v23327-classes.dex | grep 'spanishstudysherpa'
+          strings -n 3 dist/patches-v23327-classes.dex | grep 'spanishstudy_sherpa_segmentation.onnx'
+          strings -n 3 dist/patches-v23327-classes.dex | grep 'spanishstudy_sherpa_embedding.onnx'
+          strings -n 3 dist/patches-v23327-classes.dex | grep 'spanishstudy_sherpa_onnxruntime.so'
+          strings -n 3 dist/patches-v23327-classes.dex | grep 'spanishstudy_sherpa_jni.so'
+          unzip -l "$MPP" | grep 'SpeakerNeuralPayloadPatchKt.class'
           cp "$MPP" dist/spanish-dub-v23327-source-build-NOT-INSTALL.mpp
           sha256sum dist/* > dist/SHA256SUMS.txt
           ls -lh dist/
