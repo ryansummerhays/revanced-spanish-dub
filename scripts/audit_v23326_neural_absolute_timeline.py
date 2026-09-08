@@ -38,18 +38,19 @@ def main() -> None:
     ht = helper.read_text(encoding="utf-8")
     vt = vot.read_text(encoding="utf-8")
 
-    # Render-clock probe is controller driven and cannot invoke YouTube/player APIs or AudioTrack.write.
+    # Render-clock probe is controller driven and cannot invoke YouTube/player APIs or AudioTrack writes.
     require(ht, "getPlaybackHeadPosition()", "AudioTrack playback-head sampling")
     require(ht, "getTimestamp(timestamp)", "AudioTimestamp sampling")
     require(ht, "clockAnchor videoMs=", "optional runtime anchor trace")
     require(ht, "audioVideoSyncRecentAnchors=", "recent anchor diagnostics")
-    forbid(ht, "AudioTrack.write", "hot write invocation in sync helper")
+    forbid(ht, ".write(", "hot AudioTrack write invocation in sync helper")
     forbid(ht, "VideoInformation.", "YouTube player API in sync helper")
     forbid(ht, "getVideoTime(", "direct YouTube clock read in sync helper")
 
     require(pt, "getActiveAudioTrackForStudy()", "read-only active AudioTrack accessor")
     require(pt, "SherpaNeuralShadow.observePcmBuffer(", "Sherpa PCM feed retained")
     require(pt, "legacy Stage-E/F/G/J", "legacy diarizer retired marker")
+    require(pt, "if (!studyLegacySpeakerDiarizationEnabled) return;", "legacy diarizer runtime-off gate")
 
     require(ct, "VideoSessionClock.publishVideoTime(timeMs);", "video master publication")
     require(ct, "AudioVideoSyncProbe.sample(videoClock", "controller-side audio/video sampling")
