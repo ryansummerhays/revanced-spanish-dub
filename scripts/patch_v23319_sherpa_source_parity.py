@@ -47,8 +47,6 @@ def main() -> None:
         "compile official sherpa Java API",
     )
 
-    # v19 observes the first PCM trigger before any diagnostic/reset early return. This only starts
-    # model initialization after a context has also been provided; it performs no native work here.
     rep(
         player,
         "    public static void observePcmBufferForStudy(ByteBuffer buffer) {\n        studyPcmHookCalls++;\n",
@@ -58,8 +56,6 @@ def main() -> None:
         "restore v19 neural PCM trigger",
     )
 
-    # Feed the same original ByteBuffer plus already-proven AudioTrack format metadata. The neural
-    # method duplicates the buffer and fails soft; Stage-E/F/G continue independently afterward.
     rep(
         player,
         "        final int sampleRateHz = studyAudioTrackSampleRateHz;\n"
@@ -77,7 +73,6 @@ def main() -> None:
         "restore v19 bounded neural PCM feed",
     )
 
-    # Invalidate a previous-video partial/in-flight capture before clearing Stage-E/F/G state.
     rep(
         player,
         "        try {\n            // Stage E: per-video voice gate and activity statistics.\n",
@@ -87,8 +82,6 @@ def main() -> None:
         "restore v19 neural epoch reset",
     )
 
-    # The stable runtime provided the Activity from the normal main-thread video callback. No
-    # player API is touched from the audio or neural worker threads.
     rep(
         controller,
         "        LocalSpeakerDiarizer.updatePlayhead(timeMs);\n"
@@ -99,8 +92,6 @@ def main() -> None:
         "restore v19 safe context bridge",
     )
 
-    # Replace the Stage-J banner and append the neural block once. Exact diagnostic wording is less
-    # important than preserving the runtime invariants; the helper itself reports detailed state.
     rep(
         controller,
         'report.append("Spanish Dub Study v2.32.12 Stage-J per-video-speaker-reset diagnostics\\n");',
@@ -115,17 +106,23 @@ def main() -> None:
         "publish source-parity Sherpa diagnostics",
     )
 
-    # The Android 1.13.7 AAR exposes private config fields and an AssetManager constructor. The
-    # original source reconstruction accidentally used a different Java API shape. Normalize only
-    # that API boundary; capture/lifecycle behavior remains unchanged.
     compat = repo / "scripts/patch_v23319_sherpa_reflection_compat.py"
     if not compat.is_file():
         raise RuntimeError(f"missing Sherpa Android compatibility patch: {compat}")
     subprocess.run([sys.executable, str(compat), str(root)], check=True)
 
+    # Keep only the tiny public runtime surface typed. Pure reflection let R8 prove process() and
+    # OfflineSpeakerDiarizationSegment unreachable and remove them from the DEX. Direct calls to
+    # getSampleRate/process/getters preserve the JNI/result bridge without touching private configs.
+    runtime_api = repo / "scripts/patch_v23319_sherpa_direct_runtime_api.py"
+    if not runtime_api.is_file():
+        raise RuntimeError(f"missing Sherpa runtime retention patch: {runtime_api}")
+    subprocess.run([sys.executable, str(runtime_api), str(root)], check=True)
+
     print("v2.33.19 Sherpa source-parity patch complete")
     print("PRESERVED: Stage-J live badge authority, direct PCM hook, model lifetime, READY gate, epoch invalidation")
     print("PRESERVED: bounded 320000-sample capture and temporary stride-4 containment")
+    print("PRESERVED THROUGH R8: Sherpa getSampleRate/process/segment JNI result surface")
     print("NOT ACTIVE YET: video-master PCM admission, speaker voice routing")
 
 
