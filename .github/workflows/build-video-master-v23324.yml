@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.24 Video Master Source Candidate
+name: Build Spanish Dub v2.33.26 Neural Absolute Timeline
 
 on:
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Validate new patch scripts
+      - name: Validate patch scripts
         run: |
           python3 -m py_compile \
             scripts/patch_v23319_sherpa_source_parity.py \
@@ -40,7 +40,9 @@ jobs:
             scripts/patch_v23312_caption_bootstrap_source.py \
             scripts/audit_v23312_caption_bootstrap_source.py \
             scripts/patch_v23324_video_master_clock_foundation.py \
-            scripts/audit_v23324_video_master_clock_foundation.py
+            scripts/audit_v23324_video_master_clock_foundation.py \
+            scripts/patch_v23326_neural_absolute_timeline.py \
+            scripts/audit_v23326_neural_absolute_timeline.py
 
       - name: Test master-clock helpers without Android
         run: |
@@ -99,8 +101,6 @@ jobs:
           unzip -q "$AAR" -d /tmp/sherpa-aar
           cp /tmp/sherpa-aar/classes.jar upstream/extensions/youtube/libs/sherpa-onnx-1.13.7-classes.jar
           jar tf upstream/extensions/youtube/libs/sherpa-onnx-1.13.7-classes.jar | grep 'com/k2fsa/sherpa/onnx/OfflineSpeakerDiarization.class'
-          # Runtime .so/model payload is deliberately NOT copied into the extension. The final
-          # candidate reuses the proven v2.33.23 MPP patch catalog + res/raw payload verbatim.
           test ! -e upstream/extensions/youtube/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
 
       - name: Apply stable Sherpa source parity
@@ -118,6 +118,11 @@ jobs:
           python3 scripts/patch_v23324_video_master_clock_foundation.py upstream .
           python3 scripts/audit_v23324_video_master_clock_foundation.py upstream
 
+      - name: Apply neural absolute timeline and render-clock probe
+        run: |
+          python3 scripts/patch_v23326_neural_absolute_timeline.py upstream .
+          python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
+
       - name: Build source-compiled Morphe extension candidate
         working-directory: upstream
         env:
@@ -128,9 +133,8 @@ jobs:
 
       - name: Re-audit final source tree
         run: |
-          python3 scripts/audit_v23319_sherpa_source_parity.py upstream
           python3 scripts/audit_v23312_caption_bootstrap_source.py upstream
-          python3 scripts/audit_v23324_video_master_clock_foundation.py upstream
+          python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
 
       - name: Extract source-built extension and package candidate
         shell: bash
@@ -139,12 +143,14 @@ jobs:
           mkdir -p dist
           MPP="$(find upstream/patches/build/libs -maxdepth 1 -type f -name '*.mpp' | head -n1)"
           test -n "$MPP"
-          unzip -p "$MPP" extensions/youtube.mpe > dist/youtube-v23324-source-compiled.mpe
-          test -s dist/youtube-v23324-source-compiled.mpe
-          strings dist/youtube-v23324-source-compiled.mpe | grep 'SherpaNeuralShadow'
-          strings dist/youtube-v23324-source-compiled.mpe | grep 'videoMasterClock=video-ms-authority'
-          strings dist/youtube-v23324-source-compiled.mpe | grep 'v2.33.19-source-parity+stride4-only'
-          cp "$MPP" dist/spanish-dub-v23324-source-build-NOT-INSTALL.mpp
+          unzip -p "$MPP" extensions/youtube.mpe > dist/youtube-v23326-source-compiled.mpe
+          test -s dist/youtube-v23326-source-compiled.mpe
+          strings dist/youtube-v23326-source-compiled.mpe | grep 'SherpaNeuralShadow'
+          strings dist/youtube-v23326-source-compiled.mpe | grep 'videoMasterClock=video-ms-authority'
+          strings dist/youtube-v23326-source-compiled.mpe | grep 'v2.33.26-neural-only+stride4+absolute-video-projection'
+          strings dist/youtube-v23326-source-compiled.mpe | grep 'audioVideoSyncProbe=controller-sampled-audiotrack-render-clock'
+          strings dist/youtube-v23326-source-compiled.mpe | grep 'speakerNeuralAbsoluteTimelineMode=linear-projection-from-video-clock-capture-span-coarse'
+          cp "$MPP" dist/spanish-dub-v23326-source-build-NOT-INSTALL.mpp
           sha256sum dist/* > dist/SHA256SUMS.txt
           ls -lh dist/
           cat dist/SHA256SUMS.txt
@@ -152,7 +158,7 @@ jobs:
       - name: Upload source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23324-source-candidate
+          name: spanish-dub-v23326-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
