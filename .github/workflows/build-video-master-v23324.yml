@@ -128,9 +128,30 @@ jobs:
           python3 scripts/audit_v23326_neural_absolute_timeline.py upstream
 
       - name: Apply v2.33.27 accepted AudioTrack write accounting
+        shell: bash
         run: |
-          python3 scripts/patch_v23327_accepted_write_accounting.py upstream .
-          python3 scripts/audit_v23327_accepted_write_accounting.py upstream
+          set +e
+          mkdir -p /tmp/v23327-debug
+          python3 scripts/patch_v23327_accepted_write_accounting.py upstream . 2>&1 | tee /tmp/v23327-debug/patch.log
+          patch_status=${PIPESTATUS[0]}
+          if [ "$patch_status" -eq 0 ]; then
+            python3 scripts/audit_v23327_accepted_write_accounting.py upstream 2>&1 | tee /tmp/v23327-debug/audit.log
+            audit_status=${PIPESTATUS[0]}
+          else
+            audit_status=0
+          fi
+          printf 'patch_status=%s\naudit_status=%s\n' "$patch_status" "$audit_status" > /tmp/v23327-debug/status.txt
+          if [ "$patch_status" -ne 0 ]; then exit "$patch_status"; fi
+          if [ "$audit_status" -ne 0 ]; then exit "$audit_status"; fi
+
+      - name: Upload v2.33.27 patch diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v23327-patch-failure-debug
+          path: /tmp/v23327-debug/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Build source-compiled Morphe extension candidate
         working-directory: upstream
