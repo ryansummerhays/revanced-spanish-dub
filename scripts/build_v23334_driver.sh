@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reconstruct the v34 patch from a compact checked-in gzip/base64 payload. Keeping this separate
-# from the source-build MPP prevents another stale-bytecode packaging accident.
-cat scripts/v23334_patch_gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/patch_v23334_style_context_recovery.py.gz
-gzip -t /tmp/patch_v23334_style_context_recovery.py.gz
-gzip -dc /tmp/patch_v23334_style_context_recovery.py.gz > /tmp/patch_v23334_style_context_recovery.py
-python3 -m py_compile /tmp/patch_v23334_style_context_recovery.py scripts/audit_v23334_style_context_recovery.py
+# v34 is kept as normal UTF-8 source: no encoded transport, so CI can syntax-check exactly what it builds.
+python3 -m py_compile scripts/patch_v23334_style_context_recovery.py scripts/audit_v23334_style_context_recovery.py
 
 # Reuse the proven v2.33.33 reconstruction/ABI chain, then apply v34 immediately before Gradle.
 # v34 deliberately does not touch the AudioTrack patch/hook or neural payload transport.
@@ -15,7 +11,7 @@ from pathlib import Path
 src = Path('scripts/build_v23333_driver.sh').read_text(encoding='utf-8')
 
 old = '''python3 scripts/patch_v23333_identity_stabilization.py upstream .\npython3 scripts/audit_v23333_identity_stabilization.py upstream\n\n(\n  cd upstream\n'''
-new = '''python3 scripts/patch_v23333_identity_stabilization.py upstream .\npython3 scripts/audit_v23333_identity_stabilization.py upstream\npython3 /tmp/patch_v23334_style_context_recovery.py upstream .\npython3 scripts/audit_v23334_style_context_recovery.py upstream\n\n(\n  cd upstream\n'''
+new = '''python3 scripts/patch_v23333_identity_stabilization.py upstream .\npython3 scripts/audit_v23333_identity_stabilization.py upstream\npython3 scripts/patch_v23334_style_context_recovery.py upstream .\npython3 scripts/audit_v23334_style_context_recovery.py upstream\n\n(\n  cd upstream\n'''
 if src.count(old) != 1:
     raise SystemExit('v23334 driver: pre-build v33 anchor mismatch')
 src = src.replace(old, new, 1)
