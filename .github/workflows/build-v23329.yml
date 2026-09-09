@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           cat scripts/v23329r2_patch.b64 | tr -d '\r\n' | base64 -d > scripts/patch_v23329_accepted_pcm_video_master.py.gz
-          cat scripts/v23329r2_audit.b64 | tr -d '\r\n' | base64 -d > scripts/audit_v23329_accepted_pcm_video_master.py.gz
+          cat scripts/v23329r2_audit.b64.* | tr -d '\r\n' | base64 -d > scripts/audit_v23329_accepted_pcm_video_master.py.gz
           gzip -t scripts/patch_v23329_accepted_pcm_video_master.py.gz
           gzip -t scripts/audit_v23329_accepted_pcm_video_master.py.gz
           gzip -dc scripts/build_v23329_driver.sh.gz > /tmp/build_v23329_driver.sh
