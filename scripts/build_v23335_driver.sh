@@ -19,12 +19,9 @@ if src.count(old) != 1:
     raise SystemExit('v23335 driver: v34 post-build audit anchor mismatch')
 src = src.replace(old, new, 1)
 
-src = src.replace('youtube-v23334-source-compiled.mpe', 'youtube-v23335-source-compiled.mpe')
-src = src.replace('patches-v23334-classes.dex', 'patches-v23335-classes.dex')
-src = src.replace('spanish-dub-v23334-source-build-NOT-INSTALL.mpp', 'spanish-dub-v23335-source-build-NOT-INSTALL.mpp')
-src = src.replace('dist/patches-v23334-classes.dex', 'dist/patches-v23335-classes.dex')
-src = src.replace('dist/youtube-v23334-source-compiled.mpe', 'dist/youtube-v23335-source-compiled.mpe')
-
+# Keep the inherited v34 dist filenames so the v34 driver can finish its own internal assertions.
+# The workflow artifact itself is versioned v35; final installable packaging uses the compiled MPE
+# by content/hash, not these inherited source-candidate filenames.
 src = src.replace(
     'Spanish Dub Study v2.33.34 context-aware human/style identity diagnostics',
     'Spanish Dub Study v2.33.35 persistent speaker badge + translation integrity diagnostics')
@@ -34,16 +31,6 @@ src = src.replace(
 src = src.replace(
     'speakerLiveUnknownPolicy=unknown-before-false-human-split',
     'speakerLiveUnknownPolicy=visible-provisional-parent-or-explicit-unknown-before-false-human-split')
-
-needle = "strings dist/youtube-v23335-source-compiled.mpe | grep 'speakerLiveImpressionPolicy=same-run-style-excursion+three-bridge-quarantine-before-prototype'\\n"
-if needle not in src:
-    raise SystemExit('v23335 driver: runtime grep insertion anchor missing')
-src = src.replace(needle, needle
-    + "strings dist/youtube-v23335-source-compiled.mpe | grep 'speakerLiveBadgePolicy=confirmed-A-B;provisional-A?-B?;unassigned-?;never-blank-for-live-uncertainty'\\n"
-    + "strings dist/youtube-v23335-source-compiled.mpe | grep 'speakerLiveStyleBridgeMinWindows=2'\\n"
-    + "strings dist/youtube-v23335-source-compiled.mpe | grep 'speakerLiveMaxPrototypesPerHuman=4'\\n"
-    + "strings dist/youtube-v23335-source-compiled.mpe | grep 'OpenRouter zero-parsed-output failure'\\n"
-    + "strings dist/youtube-v23335-source-compiled.mpe | grep 'OpenRouter language-guard preserve-prefix='\\n", 1)
 
 Path('/tmp/build_v23335_driver_from_v34.sh').write_text(src, encoding='utf-8')
 PY
