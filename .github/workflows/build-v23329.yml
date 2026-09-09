@@ -46,10 +46,6 @@ jobs:
           gzip -dc /tmp/patch_v23330.py.gz > scripts/patch_v23330_postwrite_register_fix.py
           gzip -dc /tmp/audit_v23330.py.gz > scripts/audit_v23330_postwrite_register_fix.py
 
-          cat scripts/v23334_patch_gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/patch_v23334.py.gz
-          gzip -t /tmp/patch_v23334.py.gz
-          gzip -dc /tmp/patch_v23334.py.gz > /tmp/patch_v23334.py
-
           python3 -m py_compile \
             scripts/patch_v23331_live_speaker.py \
             scripts/patch_v23331_live_speaker_r2.py \
@@ -59,7 +55,7 @@ jobs:
             scripts/audit_v23332_live_identity_collapse_fix.py \
             scripts/patch_v23333_identity_stabilization.py \
             scripts/audit_v23333_identity_stabilization.py \
-            /tmp/patch_v23334.py \
+            scripts/patch_v23334_style_context_recovery.py \
             scripts/audit_v23334_style_context_recovery.py
           bash -n scripts/build_v23331_driver.sh scripts/build_v23332_driver.sh scripts/build_v23333_driver.sh scripts/build_v23334_driver.sh
 
