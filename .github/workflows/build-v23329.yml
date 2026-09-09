@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.36 Streaming Speaker Cache
+name: Build Spanish Dub v2.33.37 Two-Level Human Identity
 
 on:
   workflow_dispatch:
@@ -61,20 +61,29 @@ jobs:
             scripts/patch_v23335_badge_translation_integrity.py \
             scripts/audit_v23335_badge_translation_integrity.py \
             scripts/patch_v23336_streaming_context.py \
-            scripts/audit_v23336_streaming_context.py
-          bash -n scripts/build_v23331_driver.sh scripts/build_v23332_driver.sh scripts/build_v23333_driver.sh scripts/build_v23334_driver.sh scripts/build_v23335_driver.sh scripts/build_v23336_driver.sh
+            scripts/audit_v23336_streaming_context.py \
+            scripts/patch_v23337_two_level_identity.py \
+            scripts/audit_v23337_two_level_identity.py
+          bash -n \
+            scripts/build_v23331_driver.sh \
+            scripts/build_v23332_driver.sh \
+            scripts/build_v23333_driver.sh \
+            scripts/build_v23334_driver.sh \
+            scripts/build_v23335_driver.sh \
+            scripts/build_v23336_driver.sh \
+            scripts/build_v23337_driver.sh
 
-      - name: Build and audit v2.33.36
+      - name: Build and audit v2.33.37
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23336_driver.sh
+          bash scripts/build_v23337_driver.sh
 
-      - name: Upload v2.33.36 source candidate
+      - name: Upload v2.33.37 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23336-source-candidate
+          name: spanish-dub-v23337-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
