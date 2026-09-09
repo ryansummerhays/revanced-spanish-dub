@@ -86,9 +86,11 @@ python3 scripts/audit_v23331_live_speaker.py upstream
   ./gradlew :patches:buildAndroid --no-daemon
 )
 
+# Post-build source audits. The v2.33.30 audit is intentionally not rerun here because its
+# version-header assertion is superseded by v2.33.31; its verifier-safe hook invariants are
+# checked below against the actual compiled target class/dex.
 python3 scripts/audit_v23312_caption_bootstrap_source.py upstream
 python3 scripts/audit_v23327_neural_payload_source.py upstream
-python3 scripts/audit_v23330_postwrite_register_fix.py upstream
 python3 scripts/audit_v23331_live_speaker.py upstream
 
 rm -rf dist && mkdir -p dist
