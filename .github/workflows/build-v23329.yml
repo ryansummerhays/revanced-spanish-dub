@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.29 Accepted PCM Video Master
+name: Build Spanish Dub v2.33.30 Verifier-Safe Accepted PCM
 
 on:
   workflow_dispatch:
@@ -32,23 +32,37 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build and audit v2.33.29
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reconstruct v2.33.29 + v2.33.30 sources
         run: |
           set -euo pipefail
           cat scripts/v23329r3_patch.b64.* | tr -d '\r\n' | base64 -d > scripts/patch_v23329_accepted_pcm_video_master.py.gz
           cat scripts/v23329r3_audit.b64.* | tr -d '\r\n' | base64 -d > scripts/audit_v23329_accepted_pcm_video_master.py.gz
           gzip -t scripts/patch_v23329_accepted_pcm_video_master.py.gz
           gzip -t scripts/audit_v23329_accepted_pcm_video_master.py.gz
-          gzip -dc scripts/build_v23329_driver.sh.gz > /tmp/build_v23329_driver.sh
-          bash -n /tmp/build_v23329_driver.sh
-          bash /tmp/build_v23329_driver.sh
+          gzip -dc scripts/patch_v23329_accepted_pcm_video_master.py.gz > /tmp/patch_v23329.py
+          gzip -dc scripts/audit_v23329_accepted_pcm_video_master.py.gz > /tmp/audit_v23329.py
 
-      - name: Upload v2.33.29 source candidate
+          tr -d '\r\n' < scripts/v23330_patch.b64 | base64 -d > /tmp/patch_v23330.py.gz
+          tr -d '\r\n' < scripts/v23330_audit.b64 | base64 -d > /tmp/audit_v23330.py.gz
+          tr -d '\r\n' < scripts/v23330_driver.b64 | base64 -d > /tmp/build_v23330_driver.sh.gz
+          gzip -t /tmp/patch_v23330.py.gz /tmp/audit_v23330.py.gz /tmp/build_v23330_driver.sh.gz
+          gzip -dc /tmp/patch_v23330.py.gz > scripts/patch_v23330_postwrite_register_fix.py
+          gzip -dc /tmp/audit_v23330.py.gz > scripts/audit_v23330_postwrite_register_fix.py
+          gzip -dc /tmp/build_v23330_driver.sh.gz > /tmp/build_v23330_driver.sh
+          python3 -m py_compile /tmp/patch_v23329.py /tmp/audit_v23329.py scripts/patch_v23330_postwrite_register_fix.py scripts/audit_v23330_postwrite_register_fix.py
+          bash -n /tmp/build_v23330_driver.sh
+
+      - name: Build and audit v2.33.30
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bash /tmp/build_v23330_driver.sh
+
+      - name: Upload v2.33.30 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23329-source-candidate-r3
+          name: spanish-dub-v23330-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
