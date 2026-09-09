@@ -66,6 +66,28 @@ def main() -> None:
     forbid(ht, "VideoInformation.", "YouTube player API in sync helper")
     forbid(ht, "getVideoTime(", "direct YouTube player clock call in sync helper")
 
+    # v2.33.28 intentionally evolves only the neural admission policy. When this audit is rerun
+    # after v2.33.28, validate that the v2.33.27 write-accounting layer is still present and leave
+    # the new render-credit details to audit_v23328_render_clock_admission.py.
+    if "Spanish Dub Study v2.33.28 render-clock PCM admission diagnostics" in ct:
+        require(ct, "audioVideoBridge=render-clock+accepted-write-accounting+neural-render-credit-active", "v2.33.28 evolved bridge status")
+        require(ct, "pcmWriteAccounting=post-audiotrack-write-return-value-diagnostic-only", "write-accounting diagnostic marker")
+        require(ct, "pcmWriteAcceptedAudioMs=", "accepted duration diagnostic")
+        require(ct, "AudioVideoSyncProbe.sample(videoClock", "controller-side bridge sampling retained")
+        require(nt, "v2.33.28-neural-only+render-credit+absolute-video-projection", "v2.33.28 evolved neural gate")
+        forbid(nt, "if ((((int) captureBuffers) & 3) != 0) return;", "obsolete stride-4 neural gate after v2.33.28")
+        forbid(nt, "AudioTrack.write", "AudioTrack write from neural worker")
+        forbid(nt, "VideoInformation.", "YouTube player API in neural worker")
+        forbid(nt, "getVideoTime(", "direct YouTube clock read in neural worker")
+        forbid(nt, "interrupt()", "native inference interruption")
+        require(vt, "final boolean sameVideo = videoId.equals(currentVideoId);", "same-video caption bootstrap")
+        require(vt, "VideoSessionClock.onVideoOpened(videoId);", "video-session open")
+        require(vt, "VideoSessionClock.onVideoClosed();", "full-close reset")
+        require(vt, "VideoSessionClock.markExplicitSeek();", "seek continuity marker")
+        print("PASS v2.33.27 accepted-write accounting audit (retained under v2.33.28)")
+        print("Actual AudioTrack.write return-value instrumentation remains present after render-credit admission evolution")
+        return
+
     require(ct, "Spanish Dub Study v2.33.27 accepted-write PCM clock diagnostics", "v2.33.27 header")
     require(ct, "audioVideoBridge=render-clock+accepted-write-accounting-active;pcm-admission-still-stride4", "accepted-write bridge status")
     require(ct, "pcmAdmission=unchanged-sherpa-stride4-v23327-diagnostic-only", "explicit no-admission-change marker")
