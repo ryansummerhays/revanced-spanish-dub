@@ -48,15 +48,15 @@ jobs:
           gzip -t /tmp/patch_v23330.py.gz /tmp/audit_v23330.py.gz /tmp/build_v23330_driver.sh.gz
           gzip -dc /tmp/patch_v23330.py.gz > scripts/patch_v23330_postwrite_register_fix.py
           gzip -dc /tmp/audit_v23330.py.gz > scripts/audit_v23330_postwrite_register_fix.py
-          python3 -m py_compile /tmp/patch_v23329.py /tmp/audit_v23329.py scripts/patch_v23330_postwrite_register_fix.py scripts/audit_v23330_postwrite_register_fix.py scripts/patch_v23331_live_speaker.py scripts/audit_v23331_live_speaker.py
-          bash -n scripts/build_v23331_driver.sh
+          python3 -m py_compile /tmp/patch_v23329.py /tmp/audit_v23329.py scripts/patch_v23330_postwrite_register_fix.py scripts/audit_v23330_postwrite_register_fix.py scripts/patch_v23331_live_speaker.py scripts/patch_v23331_live_speaker_r2.py scripts/audit_v23331_live_speaker.py
+          bash -n scripts/build_v23331_driver.sh scripts/build_v23331_driver_r2.sh
 
       - name: Build and audit v2.33.31
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23331_driver.sh
+          bash scripts/build_v23331_driver_r2.sh
 
       - name: Upload v2.33.31 source candidate
         uses: actions/upload-artifact@v4
