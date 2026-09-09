@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v2.33.35: persistent/provisional speaker badge + OpenRouter zero-output integrity fix.
+"""v2.33.35: persistent/provisional speaker badge + OpenRouter translation integrity.
 
 Applies after v2.33.34. Intentionally leaves the accepted-PCM AudioTrack hook, video-master
 projection, ERes2Net extraction cadence, and TTS/subtitle timing architecture untouched.
@@ -33,6 +33,9 @@ def main() -> None:
         if not p.is_file():
             raise RuntimeError(f"missing v2.33.34 source: {p}")
 
+    # ------------------------------------------------------------------
+    # Speaker display/identity: make uncertainty visible instead of blank.
+    # ------------------------------------------------------------------
     rep(live,
         '''    private static final int MAX_PROTOTYPES = 3;\n''',
         '''    private static final int MAX_PROTOTYPES = 4;\n''',
@@ -48,6 +51,9 @@ def main() -> None:
         '''                    return labelFor(TL_SPEAKER[i]) + "?";\n                }\n                if (videoMs > TL_END[i] + LIVE_HOLD_MS) break;\n''',
         "mark bounded live-lag hold as provisional")
 
+    # v34 required 3 windows before a same-run excursion could bridge back to its parent.
+    # The device trace showed short 1-2-window excursions, so allow 2-window bridge evidence,
+    # while retaining the separate 3-repeat quarantine before learning a permanent prototype.
     rep(live,
         '''                || c.parentSpeechRunSerial != returnJob.speechRunSerial || c.count < 3) return;\n''',
         '''                || c.parentSpeechRunSerial != returnJob.speechRunSerial || c.count < 2) return;\n''',
@@ -63,14 +69,27 @@ def main() -> None:
         '''                    + "speakerLiveUnknownPolicy=visible-provisional-parent-or-explicit-unknown-before-false-human-split\\n"\n                    + "speakerLiveBadgePolicy=confirmed-A-B;provisional-A?-B?;unassigned-?;never-blank-for-live-uncertainty\\n"\n                    + "speakerLiveStyleBridgeMinWindows=2\\n"\n                    + "speakerLiveMaxPrototypesPerHuman=4\\n"\n                    + "speakerLiveImpressionPolicy=same-run-style-excursion+three-bridge-quarantine-before-prototype\\n"\n''',
         "publish v35 visible-uncertainty policy")
 
-    zero_anchor = '''        final int matchedFirst = contiguous;\n\n        if ("length".equalsIgnoreCase(finishReason)) {\n'''
-    zero_fix = '''        final int matchedFirst = contiguous;\n\n        // v2.33.35 hard invariant: an empty/unparseable OpenRouter stream must never fall through\n        // as a full-sized list of the source placeholders. Doing so makes applyBatch() stamp English\n        // source text with the Spanish target language and sends English to the Spanish TTS voice.\n        if (segmentSize > 0 && matchedFirst == 0) {\n            OpenRouterTelemetry.recordCardinalityMismatch(segmentSize, matched[0]);\n            SpanishStudyDiagnostics.recordAlways(SpanishStudyDiagnostics.TRANSLATION,\n                    "OpenRouter zero-parsed-output failure expected=" + segmentSize\n                            + " unique=" + matched[0] + " rawChars=" + rawOutput.length());\n            throw new Exception("OpenRouter output alignment mismatch: zero parsed slots");\n        }\n\n        if ("length".equalsIgnoreCase(finishReason)) {\n'''
+    # ------------------------------------------------------------------
+    # Translation integrity.
+    # v2.30's strict parser pre-populates result[] with source placeholders. The v34 log proved
+    # that matchedUnique=0/contiguous=0 could still escape as a full-sized result, which the caller
+    # then stamped es-ES. Fail closed here so v34's existing retry-once/Google-batch recovery runs.
+    # ------------------------------------------------------------------
+    zero_anchor = '''        final int matchedFirst = contiguous;\n'''
+    zero_fix = '''        final int matchedFirst = contiguous;\n\n        // v2.33.35 hard invariant: an empty/unparseable OpenRouter stream must never fall through\n        // as a full-sized list of source placeholders. Doing so makes applyBatch() stamp English\n        // source text with the Spanish target language and sends English to the Spanish TTS voice.\n        if (segmentSize > 0 && matchedFirst == 0) {\n            OpenRouterTelemetry.recordCardinalityMismatch(segmentSize, matched[0]);\n            SpanishStudyDiagnostics.recordAlways(SpanishStudyDiagnostics.TRANSLATION,\n                    "OpenRouter zero-parsed-output failure expected=" + segmentSize\n                            + " unique=" + matched[0] + " rawChars=" + rawOutput.length());\n            throw new Exception("OpenRouter output alignment mismatch: zero parsed slots");\n        }\n'''
     rep(translator, zero_anchor, zero_fix, "fail closed on zero parsed OpenRouter slots")
 
-    old_guard = '''            if (reason != null) {\n                SpanishStudyController.recordTranslationGuardReject(i, reason);\n                OpenRouterTelemetry.recordContentReject(httpCode, System.currentTimeMillis() - start,\n                        routedProvider, generationId, finishReason, promptTokens, completionTokens,\n                        totalTokens, cachedTokens, usageCostUsd,\n                        "language-guard slot=" + i + " reason=" + reason);\n                throw new Exception("OpenRouter language guard rejected slot " + i + ": " + reason);\n            }\n'''
-    new_guard = '''            if (reason != null) {\n                SpanishStudyController.recordTranslationGuardReject(i, reason);\n                OpenRouterTelemetry.recordContentReject(httpCode, System.currentTimeMillis() - start,\n                        routedProvider, generationId, finishReason, promptTokens, completionTokens,\n                        totalTokens, cachedTokens, usageCostUsd,\n                        "language-guard slot=" + i + " reason=" + reason);\n                if (i > 0) {\n                    final int preserved = i;\n                    SpanishStudyDiagnostics.recordAlways(SpanishStudyDiagnostics.TRANSLATION,\n                            "OpenRouter language-guard preserve-prefix=" + preserved\n                                    + " unresolvedTail=" + (segmentSize - preserved));\n                    return new ArrayList<>(result.subList(0, preserved));\n                }\n                throw new Exception("OpenRouter language guard rejected slot " + i + ": " + reason);\n            }\n'''
-    rep(translator, old_guard, new_guard, "preserve valid translation prefix on later language-guard failure")
+    # v2.30 repairs a suspicious translated slot through Google. If that singleton repair fails
+    # after earlier slots were already valid, preserve that valid contiguous prefix and let Morphe
+    # requeue only the unresolved tail instead of throwing away the good work.
+    old_guard = '''            if (fallback == null || fallback.size() != 1\n                    || DubLanguageGuard.reason(segments.get(i).text, fallback.get(0), targetLang) != null) {\n                throw new Exception("Language guard fallback failed at slot " + i);\n            }\n            result.set(i, fallback.get(0));\n'''
+    new_guard = '''            if (fallback == null || fallback.size() != 1\n                    || DubLanguageGuard.reason(segments.get(i).text, fallback.get(0), targetLang) != null) {\n                if (i > 0) {\n                    SpanishStudyDiagnostics.recordAlways(SpanishStudyDiagnostics.TRANSLATION,\n                            "OpenRouter language-guard preserve-prefix=" + i\n                                    + " unresolvedTail=" + (segmentSize - i));\n                    return new ArrayList<>(result.subList(0, i));\n                }\n                throw new Exception("Language guard fallback failed at slot " + i);\n            }\n            result.set(i, fallback.get(0));\n'''
+    rep(translator, old_guard, new_guard,
+        "preserve valid translation prefix on later language-guard fallback failure")
 
+    # ------------------------------------------------------------------
+    # Diagnostics/version identity only; no packetization or TTS timing changes.
+    # ------------------------------------------------------------------
     rep(controller,
         'report.append("Spanish Dub Study v2.33.34 context-aware human/style identity diagnostics\\n");',
         'report.append("Spanish Dub Study v2.33.35 persistent speaker badge + translation integrity diagnostics\\n");',
