@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.28 Render Clock Admission
+name: Build Spanish Dub v2.33.28 Render Clock Admission R2
 
 on:
   workflow_dispatch:
@@ -49,6 +49,7 @@ jobs:
             scripts/patch_v23327_accepted_write_accounting.py \
             scripts/audit_v23327_accepted_write_accounting.py \
             scripts/patch_v23328_render_clock_admission.py \
+            scripts/finish_v23328_render_clock_admission.py \
             scripts/audit_v23328_render_clock_admission.py
 
       - name: Test master-clock helpers without Android
@@ -142,8 +143,17 @@ jobs:
           python3 scripts/audit_v23327_accepted_write_accounting.py upstream
 
       - name: Apply v2.33.28 render-clock Sherpa admission
+        shell: bash
         run: |
-          python3 scripts/patch_v23328_render_clock_admission.py upstream
+          set +e
+          python3 scripts/patch_v23328_render_clock_admission.py upstream > /tmp/v23328-stage1.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/v23328-stage1.log
+          if [ "$rc" -ne 0 ]; then
+            grep -q 'RuntimeError: update neural gate diagnostic: expected 1 anchor(s), found 0' /tmp/v23328-stage1.log || exit "$rc"
+          fi
+          python3 scripts/finish_v23328_render_clock_admission.py upstream
           python3 scripts/audit_v23328_render_clock_admission.py upstream
 
       - name: Build source-compiled Morphe extension candidate
