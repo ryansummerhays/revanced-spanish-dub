@@ -37,8 +37,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          cat scripts/v23329r2_patch.b64 | tr -d '\r\n' | base64 -d > scripts/patch_v23329_accepted_pcm_video_master.py.gz
-          cat scripts/v23329r2_audit.b64.* | tr -d '\r\n' | base64 -d > scripts/audit_v23329_accepted_pcm_video_master.py.gz
+          cat scripts/v23329r3_patch.b64.* | tr -d '\r\n' | base64 -d > scripts/patch_v23329_accepted_pcm_video_master.py.gz
+          cat scripts/v23329r3_audit.b64.* | tr -d '\r\n' | base64 -d > scripts/audit_v23329_accepted_pcm_video_master.py.gz
           gzip -t scripts/patch_v23329_accepted_pcm_video_master.py.gz
           gzip -t scripts/audit_v23329_accepted_pcm_video_master.py.gz
           gzip -dc scripts/build_v23329_driver.sh.gz > /tmp/build_v23329_driver.sh
@@ -48,7 +48,7 @@ jobs:
       - name: Upload v2.33.29 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23329-source-candidate-r2
+          name: spanish-dub-v23329-source-candidate-r3
           path: dist/
           if-no-files-found: error
           retention-days: 30
