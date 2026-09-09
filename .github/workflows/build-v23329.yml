@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.35 Persistent Speaker Badge
+name: Build Spanish Dub v2.33.36 Streaming Speaker Cache
 
 on:
   workflow_dispatch:
@@ -58,20 +58,22 @@ jobs:
             scripts/patch_v23334_style_context_recovery.py \
             scripts/audit_v23334_style_context_recovery.py \
             scripts/patch_v23335_badge_translation_integrity.py \
-            scripts/audit_v23335_badge_translation_integrity.py
-          bash -n scripts/build_v23331_driver.sh scripts/build_v23332_driver.sh scripts/build_v23333_driver.sh scripts/build_v23334_driver.sh scripts/build_v23335_driver.sh
+            scripts/audit_v23335_badge_translation_integrity.py \
+            scripts/patch_v23336_streaming_context.py \
+            scripts/audit_v23336_streaming_context.py
+          bash -n scripts/build_v23331_driver.sh scripts/build_v23332_driver.sh scripts/build_v23333_driver.sh scripts/build_v23334_driver.sh scripts/build_v23335_driver.sh scripts/build_v23336_driver.sh
 
-      - name: Build and audit v2.33.35
+      - name: Build and audit v2.33.36
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23335_driver.sh
+          bash scripts/build_v23336_driver.sh
 
-      - name: Upload v2.33.35 source candidate
+      - name: Upload v2.33.36 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23335-source-candidate
+          name: spanish-dub-v23336-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
