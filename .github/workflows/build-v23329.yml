@@ -46,6 +46,7 @@ jobs:
           gzip -dc /tmp/patch_v23330.py.gz > scripts/patch_v23330_postwrite_register_fix.py
           gzip -dc /tmp/audit_v23330.py.gz > scripts/audit_v23330_postwrite_register_fix.py
 
+          python3 scripts/fix_v23336_diagnostic_anchor.py
           python3 -m py_compile \
             scripts/patch_v23331_live_speaker.py \
             scripts/patch_v23331_live_speaker_r2.py \
