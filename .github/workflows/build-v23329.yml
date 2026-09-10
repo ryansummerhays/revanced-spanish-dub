@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.39 Segmentation-Gated Identity Evidence
+name: Build Spanish Dub v2.33.40 Contextual Segmentation Reconciliation
 
 on:
   workflow_dispatch:
@@ -58,6 +58,12 @@ jobs:
           tar -xzf /tmp/v23339_bundle.tar.gz -C scripts
           chmod +x scripts/build_v23339_driver.sh
 
+          tr -d '\r\n' < scripts/v23340_bundle.b64 | base64 -d > /tmp/v23340_bundle.tar.gz
+          gzip -t /tmp/v23340_bundle.tar.gz
+          tar -tzf /tmp/v23340_bundle.tar.gz
+          tar -xzf /tmp/v23340_bundle.tar.gz -C scripts
+          chmod +x scripts/build_v23340_driver.sh
+
           python3 scripts/fix_v23336_diagnostic_anchor.py
           python3 -m py_compile \
             scripts/patch_v23331_live_speaker.py \
@@ -79,7 +85,9 @@ jobs:
             scripts/patch_v23338_episode_evidence_identity.py \
             scripts/audit_v23338_episode_evidence_identity.py \
             scripts/patch_v23339_segmentation_gate.py \
-            scripts/audit_v23339_segmentation_gate.py
+            scripts/audit_v23339_segmentation_gate.py \
+            scripts/patch_v23340_contextual_identity.py \
+            scripts/audit_v23340_contextual_identity.py
           bash -n \
             scripts/build_v23331_driver.sh \
             scripts/build_v23332_driver.sh \
@@ -89,29 +97,30 @@ jobs:
             scripts/build_v23336_driver.sh \
             scripts/build_v23337_driver.sh \
             scripts/build_v23338_driver.sh \
-            scripts/build_v23339_driver.sh
+            scripts/build_v23339_driver.sh \
+            scripts/build_v23340_driver.sh
 
-      - name: Build and audit v2.33.39
+      - name: Build and audit v2.33.40
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23339_driver.sh
+          bash scripts/build_v23340_driver.sh
 
-      - name: Export reconstructed v2.33.39 source
+      - name: Export reconstructed v2.33.40 source
         run: |
           set -euo pipefail
-          mkdir -p dist/reconstructed-v23339
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23339/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23339/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23339/
-          cp scripts/patch_v23339_segmentation_gate.py dist/reconstructed-v23339/
-          cp scripts/audit_v23339_segmentation_gate.py dist/reconstructed-v23339/
+          mkdir -p dist/reconstructed-v23340
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23340/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23340/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23340/
+          cp scripts/patch_v23340_contextual_identity.py dist/reconstructed-v23340/
+          cp scripts/audit_v23340_contextual_identity.py dist/reconstructed-v23340/
 
-      - name: Upload v2.33.39 source candidate
+      - name: Upload v2.33.40 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23339-source-candidate
+          name: spanish-dub-v23340-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
