@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.37 Two-Level Human Identity
+name: Build Spanish Dub v2.33.38 Episode-Evidence Human Identity
 
 on:
   workflow_dispatch:
@@ -46,6 +46,12 @@ jobs:
           gzip -dc /tmp/patch_v23330.py.gz > scripts/patch_v23330_postwrite_register_fix.py
           gzip -dc /tmp/audit_v23330.py.gz > scripts/audit_v23330_postwrite_register_fix.py
 
+          tr -d '\r\n' < scripts/v23338_patch.b64 | base64 -d > /tmp/patch_v23338.py.gz
+          tr -d '\r\n' < scripts/v23338_audit.b64 | base64 -d > /tmp/audit_v23338.py.gz
+          gzip -t /tmp/patch_v23338.py.gz /tmp/audit_v23338.py.gz
+          gzip -dc /tmp/patch_v23338.py.gz > scripts/patch_v23338_episode_evidence_identity.py
+          gzip -dc /tmp/audit_v23338.py.gz > scripts/audit_v23338_episode_evidence_identity.py
+
           python3 scripts/fix_v23336_diagnostic_anchor.py
           python3 -m py_compile \
             scripts/patch_v23331_live_speaker.py \
@@ -63,7 +69,9 @@ jobs:
             scripts/patch_v23336_streaming_context.py \
             scripts/audit_v23336_streaming_context.py \
             scripts/patch_v23337_two_level_identity.py \
-            scripts/audit_v23337_two_level_identity.py
+            scripts/audit_v23337_two_level_identity.py \
+            scripts/patch_v23338_episode_evidence_identity.py \
+            scripts/audit_v23338_episode_evidence_identity.py
           bash -n \
             scripts/build_v23331_driver.sh \
             scripts/build_v23332_driver.sh \
@@ -71,19 +79,20 @@ jobs:
             scripts/build_v23334_driver.sh \
             scripts/build_v23335_driver.sh \
             scripts/build_v23336_driver.sh \
-            scripts/build_v23337_driver.sh
+            scripts/build_v23337_driver.sh \
+            scripts/build_v23338_driver.sh
 
-      - name: Build and audit v2.33.37
+      - name: Build and audit v2.33.38
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23337_driver.sh
+          bash scripts/build_v23338_driver.sh
 
-      - name: Upload v2.33.37 source candidate
+      - name: Upload v2.33.38 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23337-source-candidate
+          name: spanish-dub-v23338-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
