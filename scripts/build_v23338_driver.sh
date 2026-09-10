@@ -44,6 +44,7 @@ src = src.replace(
 for stale_gate in (
     "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveArchitecture=raw-acoustic-profile-cache->persistent-human-map'\n",
     "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveIdentityPolicy=raw-voice-state-is-not-a-person'\n",
+    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveHumans='\n",
     "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveAcousticProfilesLinkedToExistingHuman='\n",
 ):
     src = src.replace(stale_gate, '')
