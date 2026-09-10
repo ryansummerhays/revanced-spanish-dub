@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.38 Episode-Evidence Human Identity
+name: Build Spanish Dub v2.33.39 Segmentation-Gated Identity Evidence
 
 on:
   workflow_dispatch:
@@ -52,6 +52,12 @@ jobs:
           gzip -dc /tmp/patch_v23338.py.gz > scripts/patch_v23338_episode_evidence_identity.py
           gzip -dc /tmp/audit_v23338.py.gz > scripts/audit_v23338_episode_evidence_identity.py
 
+          tr -d '\r\n' < scripts/v23339_bundle.b64 | base64 -d > /tmp/v23339_bundle.tar.gz
+          gzip -t /tmp/v23339_bundle.tar.gz
+          tar -tzf /tmp/v23339_bundle.tar.gz
+          tar -xzf /tmp/v23339_bundle.tar.gz -C scripts
+          chmod +x scripts/build_v23339_driver.sh
+
           python3 scripts/fix_v23336_diagnostic_anchor.py
           python3 -m py_compile \
             scripts/patch_v23331_live_speaker.py \
@@ -71,7 +77,9 @@ jobs:
             scripts/patch_v23337_two_level_identity.py \
             scripts/audit_v23337_two_level_identity.py \
             scripts/patch_v23338_episode_evidence_identity.py \
-            scripts/audit_v23338_episode_evidence_identity.py
+            scripts/audit_v23338_episode_evidence_identity.py \
+            scripts/patch_v23339_segmentation_gate.py \
+            scripts/audit_v23339_segmentation_gate.py
           bash -n \
             scripts/build_v23331_driver.sh \
             scripts/build_v23332_driver.sh \
@@ -80,29 +88,30 @@ jobs:
             scripts/build_v23335_driver.sh \
             scripts/build_v23336_driver.sh \
             scripts/build_v23337_driver.sh \
-            scripts/build_v23338_driver.sh
+            scripts/build_v23338_driver.sh \
+            scripts/build_v23339_driver.sh
 
-      - name: Build and audit v2.33.38
+      - name: Build and audit v2.33.39
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23338_driver.sh
+          bash scripts/build_v23339_driver.sh
 
-      - name: Export reconstructed v2.33.38 source
+      - name: Export reconstructed v2.33.39 source
         run: |
           set -euo pipefail
-          mkdir -p dist/reconstructed-v23338
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23338/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23338/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23338/
-          cp scripts/patch_v23338_episode_evidence_identity.py dist/reconstructed-v23338/
-          cp scripts/audit_v23338_episode_evidence_identity.py dist/reconstructed-v23338/
+          mkdir -p dist/reconstructed-v23339
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23339/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23339/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23339/
+          cp scripts/patch_v23339_segmentation_gate.py dist/reconstructed-v23339/
+          cp scripts/audit_v23339_segmentation_gate.py dist/reconstructed-v23339/
 
-      - name: Upload v2.33.38 source candidate
+      - name: Upload v2.33.39 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23338-source-candidate
+          name: spanish-dub-v23339-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
