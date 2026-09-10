@@ -70,11 +70,11 @@ jobs:
           gzip -t /tmp/v23341_source.patch.gz
           chmod +x scripts/build_v23341_driver.sh
 
-          # v42 exact compressed diff against reconstructed v41.
-          cat scripts/v23342_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23342_source.patch.gz
-          echo 'be2f5f4942940c2702165f4909eb43579b8036c404e0fa390b523421dcf86fa1  /tmp/v23342_source.patch.gz' | sha256sum -c -
+          # v42 R2 exact compressed diff against reconstructed v41.
+          cat scripts/v23342r2_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23342_source.patch.gz
+          echo 'bc76854130069fb0d065fdc52f0c80df2d0e4f4fbabb5662ec9e42519847ff0b  /tmp/v23342_source.patch.gz' | sha256sum -c -
           gzip -t /tmp/v23342_source.patch.gz
-          chmod +x scripts/build_v23342_driver.sh
+          chmod +x scripts/build_v23342_r2_driver.sh
 
           python3 scripts/fix_v23336_diagnostic_anchor.py
           python3 -m py_compile \
@@ -101,7 +101,7 @@ jobs:
             scripts/patch_v23340_contextual_identity.py \
             scripts/audit_v23340_contextual_identity.py \
             scripts/audit_v23341_clean_episode_statistics.py \
-            scripts/audit_v23342_cross_episode_statistics.py
+            scripts/audit_v23342_cross_episode_statistics_r2.py
           bash -n \
             scripts/build_v23331_driver.sh \
             scripts/build_v23332_driver.sh \
@@ -114,14 +114,14 @@ jobs:
             scripts/build_v23339_driver.sh \
             scripts/build_v23340_driver.sh \
             scripts/build_v23341_driver.sh \
-            scripts/build_v23342_driver.sh
+            scripts/build_v23342_r2_driver.sh
 
       - name: Build and audit v2.33.42
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23342_driver.sh
+          bash scripts/build_v23342_r2_driver.sh
 
       - name: Export reconstructed v2.33.42 source
         run: |
@@ -130,8 +130,8 @@ jobs:
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23342/
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23342/
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23342/
-          cp scripts/audit_v23342_cross_episode_statistics.py dist/reconstructed-v23342/
-          cp scripts/v23342_source.patch.gz.b64.* dist/reconstructed-v23342/
+          cp scripts/audit_v23342_cross_episode_statistics_r2.py dist/reconstructed-v23342/
+          cp scripts/v23342r2_source.patch.gz.b64.* dist/reconstructed-v23342/
 
       - name: Upload v2.33.42 source candidate
         uses: actions/upload-artifact@v4
