@@ -58,7 +58,7 @@ jobs:
           tar -xzf /tmp/v23339_bundle.tar.gz -C scripts
           chmod +x scripts/build_v23339_driver.sh
 
-          tr -d '\r\n' < scripts/v23340_bundle.b64 | base64 -d > /tmp/v23340_bundle.tar.gz
+          cat scripts/v23340_bundle.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23340_bundle.tar.gz
           gzip -t /tmp/v23340_bundle.tar.gz
           tar -tzf /tmp/v23340_bundle.tar.gz
           tar -xzf /tmp/v23340_bundle.tar.gz -C scripts
