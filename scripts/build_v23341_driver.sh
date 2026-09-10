@@ -13,7 +13,7 @@ printf '%s  %s\n' dd6042c2cef97f1ddc5fd07d2a9f91c2ac6c209bf48c3f47eb7b5af0421cb6
 printf '%s  %s\n' eb08583da4c2442e6d4e9040d34694eb7c5ba487a73008a00fd66d5140780167 "$SHERPA" | sha256sum -c -
 printf '%s  %s\n' 688964730c41a9c82579da87bd15b47ff66d6737e31d65541d781f62d6718267 "$CONTROLLER" | sha256sum -c -
 
-tr -d '\r\n' < scripts/v23341_source.patch.gz.b64 | base64 -d > /tmp/v23341_source.patch.gz
+cat scripts/v23341_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23341_source.patch.gz
 echo '68d4fbb47c509bc531930af87fe8f6ab0e907b1d8055a58e4f71608bc138c0fe  /tmp/v23341_source.patch.gz' | sha256sum -c -
 gzip -t /tmp/v23341_source.patch.gz
 gzip -dc /tmp/v23341_source.patch.gz > /tmp/v23341_source.patch
