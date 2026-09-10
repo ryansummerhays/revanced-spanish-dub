@@ -40,6 +40,14 @@ src = src.replace(
     'speakerLiveMode=eres2net-two-level-acoustic-human-identity-v23337',
     'speakerLiveMode=eres2net-episode-evidence-human-identity-v23338')
 
+# Retire v37-only smoke tests whose strings are deliberately replaced by v38.
+for stale_gate in (
+    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveArchitecture=raw-acoustic-profile-cache->persistent-human-map'\n",
+    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveIdentityPolicy=raw-voice-state-is-not-a-person'\n",
+    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveAcousticProfilesLinkedToExistingHuman='\n",
+):
+    src = src.replace(stale_gate, '')
+
 # Add hard runtime-string gates for the new architecture.
 needle = "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveSameHumanRawTransitions='\\n"
 if needle not in src:
