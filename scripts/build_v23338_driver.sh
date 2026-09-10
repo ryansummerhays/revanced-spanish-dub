@@ -40,14 +40,22 @@ src = src.replace(
     'speakerLiveMode=eres2net-two-level-acoustic-human-identity-v23337',
     'speakerLiveMode=eres2net-episode-evidence-human-identity-v23338')
 
-# Retire v37-only smoke tests whose strings are deliberately replaced by v38.
-for stale_gate in (
-    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveArchitecture=raw-acoustic-profile-cache->persistent-human-map'\n",
-    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveIdentityPolicy=raw-voice-state-is-not-a-person'\n",
-    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveHumans='\n",
-    "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveAcousticProfilesLinkedToExistingHuman='\n",
-):
-    src = src.replace(stale_gate, '')
+# Retire v37-only runtime greps by fragment.  These lines live inside the
+# v37 driver's nested Python generator, so fragment filtering is deliberate:
+# it works regardless of the nested escaping level.
+stale_fragments = (
+    'speakerLiveArchitecture=raw-acoustic-profile-cache->persistent-human-map',
+    'speakerLiveIdentityPolicy=raw-voice-state-is-not-a-person',
+    'speakerLiveHumans=',
+    'speakerLiveAcousticProfilesLinkedToExistingHuman=',
+)
+lines = src.splitlines()
+for fragment in stale_fragments:
+    hits = sum(fragment in line for line in lines)
+    if hits != 1:
+        raise SystemExit(f'v23338 driver: expected exactly one stale runtime gate for {fragment!r}, found {hits}')
+    lines = [line for line in lines if fragment not in line]
+src = '\n'.join(lines) + '\n'
 
 # Add hard runtime-string gates for the new architecture.
 needle = "strings dist/youtube-v23338-source-compiled.mpe | grep 'speakerLiveSameHumanRawTransitions='\\n"
