@@ -65,7 +65,7 @@ jobs:
           chmod +x scripts/build_v23340_driver.sh
 
           # v41 is an exact compressed unified diff against the successful reconstructed v40 source.
-          tr -d '\r\n' < scripts/v23341_source.patch.gz.b64 | base64 -d > /tmp/v23341_source.patch.gz
+          cat scripts/v23341_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23341_source.patch.gz
           echo '68d4fbb47c509bc531930af87fe8f6ab0e907b1d8055a58e4f71608bc138c0fe  /tmp/v23341_source.patch.gz' | sha256sum -c -
           gzip -t /tmp/v23341_source.patch.gz
           chmod +x scripts/build_v23341_driver.sh
@@ -123,7 +123,7 @@ jobs:
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23341/
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23341/
           cp scripts/audit_v23341_clean_episode_statistics.py dist/reconstructed-v23341/
-          cp scripts/v23341_source.patch.gz.b64 dist/reconstructed-v23341/
+          cp scripts/v23341_source.patch.gz.b64.* dist/reconstructed-v23341/
 
       - name: Upload v2.33.41 source candidate
         uses: actions/upload-artifact@v4
