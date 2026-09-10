@@ -89,6 +89,16 @@ jobs:
           set -euo pipefail
           bash scripts/build_v23338_driver.sh
 
+      - name: Export reconstructed v2.33.38 source
+        run: |
+          set -euo pipefail
+          mkdir -p dist/reconstructed-v23338
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23338/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23338/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23338/
+          cp scripts/patch_v23338_episode_evidence_identity.py dist/reconstructed-v23338/
+          cp scripts/audit_v23338_episode_evidence_identity.py dist/reconstructed-v23338/
+
       - name: Upload v2.33.38 source candidate
         uses: actions/upload-artifact@v4
         with:
