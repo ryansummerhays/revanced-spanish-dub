@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.44 Structural Episode-Family Identity
+name: Build Spanish Dub v2.33.45 Calibrated Neighborhood Identity
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 85
     steps:
       - name: Checkout custom integration
         uses: actions/checkout@v4
@@ -82,31 +82,36 @@ jobs:
           gzip -t /tmp/v23344_source.patch.gz
           chmod +x scripts/build_v23344_driver.sh
 
-          python3 scripts/fix_v23336_diagnostic_anchor.py
-          python3 -m py_compile scripts/audit_v23344_structural_episode_family.py
-          bash -n scripts/build_v23344_driver.sh
+          cat scripts/v23345_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23345_source.patch.gz
+          echo '9b4c03a03aa778b02c34fce45624170e3fa57d96a669233cb6d5acd7b2bf9000  /tmp/v23345_source.patch.gz' | sha256sum -c -
+          gzip -t /tmp/v23345_source.patch.gz
+          chmod +x scripts/build_v23345_driver.sh
 
-      - name: Build and audit v2.33.44
+          python3 scripts/fix_v23336_diagnostic_anchor.py
+          python3 -m py_compile scripts/audit_v23345_calibrated_neighborhood.py
+          bash -n scripts/build_v23345_driver.sh
+
+      - name: Build and audit v2.33.45
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23344_driver.sh
+          bash scripts/build_v23345_driver.sh
 
-      - name: Export reconstructed v2.33.44 source
+      - name: Export reconstructed v2.33.45 source
         run: |
           set -euo pipefail
-          mkdir -p dist/reconstructed-v23344
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23344/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23344/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23344/
-          cp scripts/audit_v23344_structural_episode_family.py dist/reconstructed-v23344/
-          cp scripts/v23344_source.patch.gz.b64.* dist/reconstructed-v23344/
+          mkdir -p dist/reconstructed-v23345
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23345/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23345/
+          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23345/
+          cp scripts/audit_v23345_calibrated_neighborhood.py dist/reconstructed-v23345/
+          cp scripts/v23345_source.patch.gz.b64.* dist/reconstructed-v23345/
 
-      - name: Upload v2.33.44 source candidate
+      - name: Upload v2.33.45 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23344-source-candidate
+          name: spanish-dub-v23345-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
