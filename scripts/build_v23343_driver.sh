@@ -9,15 +9,15 @@ printf '%s  %s\n' a436664f71f6f65825bd5782f1e3a262842bc1d0c9cfc601f606e8d6b6aeca
 printf '%s  %s\n' 2b4012c4e5353769b1d1d1927aeca3b6bcee482a3d12d2411693fbd539de5626 "$SHERPA" | sha256sum -c -
 printf '%s  %s\n' 25a06af074c20880887da3395f45c47a9fef58b095a29027e96e8ab730a9d532 "$CONTROLLER" | sha256sum -c -
 cat scripts/v23343_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23343_source.patch.gz
-echo 'b9d9b65817dc2dfdee9525bd9dc4f6312ddf0fa1b51bf7f194794f1f8a6379f8  /tmp/v23343_source.patch.gz' | sha256sum -c -
+echo '09b497e650e14458b6605b3e668d3a9dfef397def9a3258042ba793525545378  /tmp/v23343_source.patch.gz' | sha256sum -c -
 gzip -t /tmp/v23343_source.patch.gz
 gzip -dc /tmp/v23343_source.patch.gz > /tmp/v23343_source.patch
-echo '50d821c8a0113a5986a813635454cde9c0fb1f3ba95f178959310d2e79eaf5ee  /tmp/v23343_source.patch' | sha256sum -c -
+echo '31f7a0f3968d70c48fba882762e41b8567d4ee1fcacc4e4ca69f2afd62fe52f5  /tmp/v23343_source.patch' | sha256sum -c -
 (
  cd upstream/extensions/youtube/src/main/java/app/spanishstudy/vot
  patch --batch --forward -p1 < /tmp/v23343_source.patch
 )
-printf '%s  %s\n' 3eadd4fa6f9d72284032b55aa48a52d86f9ac234c24b14c8f5f2b637a10965e8 "$LIVE" | sha256sum -c -
+printf '%s  %s\n' 0a4731c74d7fd69f02057e14d736acc24111ef50cd1d53d2f66b7d9e554d12fe "$LIVE" | sha256sum -c -
 printf '%s  %s\n' 2b4012c4e5353769b1d1d1927aeca3b6bcee482a3d12d2411693fbd539de5626 "$SHERPA" | sha256sum -c -
 printf '%s  %s\n' b6101b1d093c776d76127d49a84a4e91e833c3170aea201bff8133228cde8697 "$CONTROLLER" | sha256sum -c -
 python3 scripts/audit_v23343_empirical_calibration.py upstream
