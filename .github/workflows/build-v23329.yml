@@ -1,4 +1,4 @@
-name: Build Spanish Dub v2.33.46 Speaker Clustering Comparison
+name: Build Spanish Dub v2.33.47 Confirmed Shadow Singleton Rescue
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 100
     steps:
       - name: Checkout custom integration
         uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Reconstruct source chain
+      - name: Reconstruct trusted v2.33.45 source chain
         run: |
           set -euo pipefail
           cat scripts/v23329r3_patch.b64.* | tr -d '\r\n' | base64 -d > scripts/patch_v23329_accepted_pcm_video_master.py.gz
@@ -87,38 +87,57 @@ jobs:
           gzip -t /tmp/v23345_source.patch.gz
           chmod +x scripts/build_v23345_driver.sh
 
-          cat scripts/v23346_bundle.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23346_bundle.tar.gz
-          echo '181e9baf5cb8014a2f59ca9e7ba74e625b794af85074aec3f5906890cfdeeafb  /tmp/v23346_bundle.tar.gz' | sha256sum -c -
-          gzip -t /tmp/v23346_bundle.tar.gz
-          tar -xzf /tmp/v23346_bundle.tar.gz -C scripts
-          chmod +x scripts/build_v23346_driver.sh
-
+          echo '9fccea55dd32f6a447c6b9647629762a37c79c5d0a346152cb656d1cdf320ca8  scripts/v23347_source.patch' | sha256sum -c -
+          python3 -m py_compile scripts/audit_v23347_confirmed_shadow_singleton_rescue.py
           python3 scripts/fix_v23336_diagnostic_anchor.py
-          python3 -m py_compile scripts/audit_v23346_shadow_comparison.py
-          bash -n scripts/build_v23346_driver.sh
 
-      - name: Build and audit v2.33.46
+      - name: Build trusted v2.33.45 carrier source
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          bash scripts/build_v23346_driver.sh
+          bash scripts/build_v23345_driver.sh
 
-      - name: Export reconstructed v2.33.46 source
+      - name: Patch build and audit v2.33.47
         run: |
           set -euo pipefail
-          mkdir -p dist/reconstructed-v23346
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java dist/reconstructed-v23346/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23346/
-          cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23346/
-          cp scripts/audit_v23346_shadow_comparison.py dist/reconstructed-v23346/
-          cp scripts/v23346_source.patch.gz dist/reconstructed-v23346/
-          cp scripts/v23346_bundle.b64.* dist/reconstructed-v23346/
+          LIVE=upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/LiveSpeakerOnline.java
+          SHERPA=upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java
+          CONTROLLER=upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java
+          printf '%s  %s\n' 314a7ca6ab50154329ae0bc5b6b56b7b8e066f62fd4598cecc5fc771288539ee "$LIVE" | sha256sum -c -
+          printf '%s  %s\n' 2b4012c4e5353769b1d1d1927aeca3b6bcee482a3d12d2411693fbd539de5626 "$SHERPA" | sha256sum -c -
+          printf '%s  %s\n' a3787e30cfa768004e5043216049708e621c050139c973fa590adb2ca2570e12 "$CONTROLLER" | sha256sum -c -
+          patch --batch --forward -d upstream/extensions/youtube/src/main/java/app/spanishstudy/vot -p1 < scripts/v23347_source.patch
+          printf '%s  %s\n' 39330657f9c991d23bdeb483b52f7496dcb1c02bca1a071e2628e9a98535391b "$LIVE" | sha256sum -c -
+          printf '%s  %s\n' 2b4012c4e5353769b1d1d1927aeca3b6bcee482a3d12d2411693fbd539de5626 "$SHERPA" | sha256sum -c -
+          printf '%s  %s\n' 7c3f375bcd4c59177d1b699851956fe734d25a0538234e7416549bfca49f94c7 "$CONTROLLER" | sha256sum -c -
+          python3 scripts/audit_v23347_confirmed_shadow_singleton_rescue.py upstream
+          (cd upstream && chmod +x gradlew && ./gradlew :patches:buildAndroid --no-daemon)
+          python3 scripts/audit_v23312_caption_bootstrap_source.py upstream
+          python3 scripts/audit_v23327_neural_payload_source.py upstream
+          python3 scripts/audit_v23347_confirmed_shadow_singleton_rescue.py upstream
 
-      - name: Upload v2.33.46 source candidate
+          rm -rf dist && mkdir -p dist
+          MPP="$(find upstream/patches/build/libs -maxdepth 1 -type f -name '*.mpp' | head -n1)"
+          test -n "$MPP"
+          unzip -p "$MPP" extensions/youtube.mpe > dist/youtube-v23347-source-compiled.mpe
+          unzip -p "$MPP" classes.dex > dist/patches-v23347-classes.dex
+          unzip -p "$MPP" app/morphe/patches/youtube/video/volume/PlayerVolumeHookPatchKt.class > dist/PlayerVolumeHookPatchKt.class
+          strings dist/youtube-v23347-source-compiled.mpe | grep 'Spanish Dub Study v2.33.47 confirmed-shadow singleton-rescue statistical speaker identity diagnostics'
+          strings dist/youtube-v23347-source-compiled.mpe | grep 'speakerIdentityAuthority=confirmed-shadow-singleton-rescue-statistical-v23347'
+          strings dist/youtube-v23347-source-compiled.mpe | grep 'speakerStatShadowBridgePolicy=singleton-only+same-confirmed-shadow-raw-profile+prior-confirmed-stat-human+no-repeated-negative;never-bootstraps-new-human'
+          strings dist/youtube-v23347-source-compiled.mpe | grep 'speakerStatShadowSingletonUnions='
+          echo 'd0f2b5d2508221a7dad5507ceb8b35aa1e632b4a48f8cd24e14716ae968c15dc  dist/patches-v23347-classes.dex' | sha256sum -c -
+          echo '196e36771ac7d8ba1d8da1f4470e5803b9074c5e9f5bfa475a3e9c51d2010708  dist/PlayerVolumeHookPatchKt.class' | sha256sum -c -
+          cp "$MPP" dist/spanish-dub-v23347-source-build-NOT-INSTALL.mpp
+          cp scripts/v23347_source.patch dist/
+          cp scripts/audit_v23347_confirmed_shadow_singleton_rescue.py dist/
+          sha256sum dist/* > dist/SHA256SUMS.txt
+
+      - name: Upload v2.33.47 source candidate
         uses: actions/upload-artifact@v4
         with:
-          name: spanish-dub-v23346-source-candidate
+          name: spanish-dub-v23347-source-candidate
           path: dist/
           if-no-files-found: error
           retention-days: 30
