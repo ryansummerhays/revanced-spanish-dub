@@ -1,0 +1,192 @@
+--- a/LiveSpeakerOnline.java
++++ b/LiveSpeakerOnline.java
+@@ -9,7 +9,7 @@
+ import java.util.Arrays;
+ 
+ /**
+- * v2.33.45 calibrated-neighborhood speaker identity tracker.
++ * v2.33.47 confirmed-shadow singleton-rescue speaker identity tracker.
+  *
+  * v44 keeps the v43 clean-slot/independence front end but repairs three invariants exposed by
+  * real playback: artificial chunks of one uninterrupted episode family are structurally the same
+@@ -297,6 +297,7 @@
+     private static long statLiveClassified, statLiveAbstained;
+     private static long statTurnBoundariesCarried;
+     private static long statStructuralGroupUnions;
++    private static long statShadowSingletonCandidates, statShadowSingletonUnions, statShadowSingletonSuppressed;
+     private static final float[] STAT_CALIBRATION_POSITIVE_RAW = new float[512];
+     private static int statCalibrationPositiveRawCount;
+     private static int statCalibrationPositiveRawWrite;
+@@ -1813,7 +1814,7 @@
+                             .append('/').append(pairEvidenceLocked(CANNOT_LINK, i, PROFILE_BRIDGE_PARENT[i]));
+                 }
+             }
+-            return "speakerLiveMode=shadow-eres2net-v23340+calibrated-neighborhood-statistical-authority-v23345\n"
++            return "speakerLiveMode=shadow-eres2net-v23340+confirmed-shadow-singleton-rescue-statistical-authority-v23347\n"
+                     + "speakerLiveWindowMs=2000\n"
+                     + "speakerLiveHopMs=600\n"
+                     + "speakerLiveDecisionCoreMs=600\n"
+@@ -1889,7 +1890,7 @@
+                     + "speakerLiveAcousticProfileSwitches=" + acousticProfileSwitches + "\n"
+                     + "speakerLiveSameHumanRawTransitions=" + sameHumanRawTransitions + "\n"
+                     + "speakerLiveSameRunRawTransitions=" + sameRunRawTransitions + "\n"
+-                    + "speakerIdentityAuthority=calibrated-neighborhood-statistical-v23345\n"
++                    + "speakerIdentityAuthority=confirmed-shadow-singleton-rescue-statistical-v23347\n"
+                     + "speakerStatContextMs=10000\n"
+                     + "speakerStatCoreMs=1000-centered-5s-behind-live\n"
+                     + "speakerStatConsensusPolicy=central+two-overlapping-context-probes-majority;not-independent-votes\n"
+@@ -1922,6 +1923,10 @@
+                     + "speakerStatIndependentGroups=" + statIndependentGroups + "\n"
+                     + "speakerStatTurnBoundariesCarried=" + statTurnBoundariesCarried + "\n"
+                     + "speakerStatStructuralGroupUnions=" + statStructuralGroupUnions + "\n"
++                    + "speakerStatShadowBridgePolicy=singleton-only+same-confirmed-shadow-raw-profile+prior-confirmed-stat-human+no-repeated-negative;never-bootstraps-new-human\n"
++                    + "speakerStatShadowSingletonCandidates=" + statShadowSingletonCandidates + "\n"
++                    + "speakerStatShadowSingletonUnions=" + statShadowSingletonUnions + "\n"
++                    + "speakerStatShadowSingletonSuppressed=" + statShadowSingletonSuppressed + "\n"
+                     + "speakerStatHumanLabelPolicy=stable-earliest-mode-anchor;unrelated-merges-do-not-renumber\n"
+                     + "speakerStatCalibrationPositiveCount=" + statCalibrationPositiveCount + "\n"
+                     + "speakerStatCalibrationPositiveSource=raw-within-clean-episode-measurement-pairs\n"
+@@ -2079,6 +2084,7 @@
+         Arrays.fill(STAT_MODE_NEAREST_MARGIN, 0f);
+         statLiveClassified = statLiveAbstained = 0L;
+         statStructuralGroupUnions = 0L;
++        statShadowSingletonCandidates = statShadowSingletonUnions = statShadowSingletonSuppressed = 0L;
+         statCalibrationPositiveRawCount = 0;
+         statCalibrationPositiveRawWrite = 0;
+         Arrays.fill(STAT_CALIBRATION_POSITIVE_RAW, 0f);
+@@ -2955,6 +2961,112 @@
+                 - statComparisonPenalty();
+     }
+ 
++    /**
++     * v47 cross-system rescue: return the legacy live raw profile only when one confirmed raw
++     * identity covers most of this statistical episode. The shadow tracker remains read-only for
++     * ordinary clustering; this is solely a conservative singleton-fragment adjudicator.
++     */
++    private static int statConfirmedShadowRawForSpanLocked(long startMs, long endMs) {
++        if (endMs <= startMs || timelineCount <= 0) return -1;
++        long span = endMs - startMs;
++        long[] byRaw = new long[MAX_PROFILES];
++        for (int i = 0; i < timelineCount; i++) {
++            int raw = TL_SPEAKER[i];
++            if (raw < 0 || raw >= profileCount) continue;
++            int human = humanForProfileLocked(raw);
++            if (human < 0 || human >= humanCount || !HUMAN_ACTIVE[human] || !HUMAN_CONFIRMED[human]) continue;
++            long overlap = Math.min(endMs, TL_END[i]) - Math.max(startMs, TL_START[i]);
++            if (overlap > 0L) byRaw[raw] += overlap;
++        }
++        int best = -1;
++        long bestMs = 0L;
++        long secondMs = 0L;
++        for (int raw = 0; raw < profileCount; raw++) {
++            long ms = byRaw[raw];
++            if (ms > bestMs) { secondMs = bestMs; bestMs = ms; best = raw; }
++            else if (ms > secondMs) secondMs = ms;
++        }
++        if (best < 0 || bestMs * 1000L < span * 650L) return -1;
++        // A close tie means the shadow path itself observed a transition; do not erase it.
++        if (secondMs > 0L && bestMs < secondMs * 2L) return -1;
++        return best;
++    }
++
++    private static int statConfirmedShadowRawForModeLocked(int modeId) {
++        if (modeId < 0 || modeId >= statModeCount) return -1;
++        StatMode mode = STAT_MODES[modeId];
++        if (mode == null || mode.count <= 0) return -1;
++        int raw = -1;
++        int observed = 0;
++        for (int i = 0; i < mode.count; i++) {
++            int episodeId = mode.episodeIds[i];
++            if (episodeId < 0 || episodeId >= statEpisodeCount) continue;
++            StatEpisode ep = STAT_EPISODES[episodeId];
++            if (ep == null) continue;
++            int r = statConfirmedShadowRawForSpanLocked(ep.startMs, ep.endMs);
++            if (r < 0) continue;
++            if (raw >= 0 && raw != r) return -1;
++            raw = r;
++            observed++;
++        }
++        return observed > 0 ? raw : -1;
++    }
++
++    private static boolean statPriorHumanConfirmedForModeLocked(int modeId) {
++        if (modeId < 0 || modeId >= statModeCount) return false;
++        int human = STAT_MODE_HUMAN[modeId];
++        return human >= 0 && human < statHumanCount && STAT_HUMAN_CONFIRMED[human];
++    }
++
++    private static void applyConfirmedShadowSingletonRescueLocked(int[] parent) {
++        statShadowSingletonCandidates = 0L;
++        statShadowSingletonUnions = 0L;
++        statShadowSingletonSuppressed = 0L;
++        if (statModeCount <= 1 || profileCount <= 0 || humanCount <= 0) return;
++
++        int[] rawByMode = new int[STAT_MAX_MODES];
++        Arrays.fill(rawByMode, -1);
++        for (int m = 0; m < statModeCount; m++) rawByMode[m] = statConfirmedShadowRawForModeLocked(m);
++
++        for (int m = 0; m < statModeCount; m++) {
++            StatMode singleton = STAT_MODES[m];
++            if (singleton == null || singleton.count != 1) continue;
++            int raw = rawByMode[m];
++            if (raw < 0) continue;
++            int rm = statFind(parent, m);
++            if (statClusterSizeLocked(parent, rm) != 1) continue;
++            statShadowSingletonCandidates++;
++
++            int target = -1;
++            float targetAffinity = -2f;
++            for (int b = 0; b < statModeCount; b++) {
++                if (b == m || rawByMode[b] != raw || !statPriorHumanConfirmedForModeLocked(b)) continue;
++                int rb = statFind(parent, b);
++                if (rb == rm) continue;
++                int idx = statPairIndex(m, b);
++                // One pyannote TURN is soft. Repeated independent different evidence or repeated
++                // strong-negative embedding matches still block the cross-system rescue.
++                if (statPairEvidence(STAT_DIFF_EVIDENCE, m, b) >= 2 || STAT_PAIR_NEGATIVE[idx] >= 2) continue;
++                float affinity = statCrossModeAffinity(m, b);
++                if (affinity < 0.20f) continue;
++                if (target < 0 || affinity > targetAffinity) {
++                    target = b;
++                    targetAffinity = affinity;
++                }
++            }
++            if (target < 0) {
++                statShadowSingletonSuppressed++;
++                continue;
++            }
++            int rt = statFind(parent, target);
++            rm = statFind(parent, m);
++            if (rm != rt) {
++                parent[rm] = rt;
++                statShadowSingletonUnions++;
++            }
++        }
++    }
++
+     private static void recomputeStatHumansLocked() {
+         // Re-solve from retained evidence every time. Nothing about a previous human assignment is
+         // carried forward, so later contradictory evidence can split an earlier provisional seed.
+@@ -2981,6 +3093,11 @@
+             }
+         }
+ 
++        // v47: if the independent live tracker continuously recognizes one already-confirmed raw
++        // identity across a one-off statistical fragment, rescue only that singleton. Never merge
++        // two established components and never use this path to bootstrap a new confirmed human.
++        applyConfirmedShadowSingletonRescueLocked(parent);
++
+         while (true) {
+             int bestRa = -1, bestRb = -1, bestScore = Integer.MIN_VALUE;
+             for (int a = 0; a < statModeCount; a++) {
+--- a/SpanishStudyController.java
++++ b/SpanishStudyController.java
+@@ -169,7 +169,7 @@
+         if (activity != null) SpanishStudyPrefs.applyDiagnosticConfig(activity);
+ 
+         StringBuilder report = new StringBuilder();
+-        report.append("Spanish Dub Study v2.33.45 calibrated neighborhood statistical speaker identity diagnostics\n");
++        report.append("Spanish Dub Study v2.33.47 confirmed-shadow singleton-rescue statistical speaker identity diagnostics\n");
+         report.append("coreArchitecture=morphe-v1.41.0-stock-vot+read-only-diagnostic-hooks\n");
+         report.append("speechSegmentation=stock-morphe-mergeIntoSentences-UNCHANGED\n");
+         report.append("translationPacketization=stock-morphe-1500char+350char-first-UNCHANGED\n");
