@@ -3,7 +3,7 @@
 from pathlib import Path
 import hashlib,sys
 EXPECTED={
-'LiveSpeakerOnline.java':'3eadd4fa6f9d72284032b55aa48a52d86f9ac234c24b14c8f5f2b637a10965e8',
+'LiveSpeakerOnline.java':'0a4731c74d7fd69f02057e14d736acc24111ef50cd1d53d2f66b7d9e554d12fe',
 'SherpaNeuralShadow.java':'2b4012c4e5353769b1d1d1927aeca3b6bcee482a3d12d2411693fbd539de5626',
 'SpanishStudyController.java':'b6101b1d093c776d76127d49a84a4e91e833c3170aea201bff8133228cde8697',
 }
