@@ -74,8 +74,8 @@ jobs:
           gzip -t /tmp/v23342_source.patch.gz
           chmod +x scripts/build_v23342_r2_driver.sh
 
-          cat scripts/v23343_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23343_source.patch.gz
-          echo 'b9d9b65817dc2dfdee9525bd9dc4f6312ddf0fa1b51bf7f194794f1f8a6379f8  /tmp/v23343_source.patch.gz' | sha256sum -c -
+          cat scripts/v23343r2_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23343_source.patch.gz
+          echo '09b497e650e14458b6605b3e668d3a9dfef397def9a3258042ba793525545378  /tmp/v23343_source.patch.gz' | sha256sum -c -
           gzip -t /tmp/v23343_source.patch.gz
           chmod +x scripts/build_v23343_driver.sh
 
@@ -136,7 +136,7 @@ jobs:
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SherpaNeuralShadow.java dist/reconstructed-v23343/
           cp upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/SpanishStudyController.java dist/reconstructed-v23343/
           cp scripts/audit_v23343_empirical_calibration.py dist/reconstructed-v23343/
-          cp scripts/v23343_source.patch.gz.b64.* dist/reconstructed-v23343/
+          cp scripts/v23343r2_source.patch.gz.b64.* dist/reconstructed-v23343/
 
       - name: Upload v2.33.43 source candidate
         uses: actions/upload-artifact@v4
