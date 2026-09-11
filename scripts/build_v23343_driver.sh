@@ -8,7 +8,7 @@ CONTROLLER=upstream/extensions/youtube/src/main/java/app/spanishstudy/vot/Spanis
 printf '%s  %s\n' a436664f71f6f65825bd5782f1e3a262842bc1d0c9cfc601f606e8d6b6aecacf "$LIVE" | sha256sum -c -
 printf '%s  %s\n' 2b4012c4e5353769b1d1d1927aeca3b6bcee482a3d12d2411693fbd539de5626 "$SHERPA" | sha256sum -c -
 printf '%s  %s\n' 25a06af074c20880887da3395f45c47a9fef58b095a29027e96e8ab730a9d532 "$CONTROLLER" | sha256sum -c -
-cat scripts/v23343_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23343_source.patch.gz
+cat scripts/v23343r2_source.patch.gz.b64.* | tr -d '\r\n' | base64 -d > /tmp/v23343_source.patch.gz
 echo '09b497e650e14458b6605b3e668d3a9dfef397def9a3258042ba793525545378  /tmp/v23343_source.patch.gz' | sha256sum -c -
 gzip -t /tmp/v23343_source.patch.gz
 gzip -dc /tmp/v23343_source.patch.gz > /tmp/v23343_source.patch
